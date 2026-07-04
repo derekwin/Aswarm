@@ -16,31 +16,52 @@ class ToolDefinition:
     handler: Callable[..., Any]
 
 
-def _bing_search(query: str, max_results: int) -> str:
+def _search_multi_engine(query: str, max_results: int) -> str:
+    """Multi-engine search: try Bing first, fall back to Sogou."""
     import urllib.request
     import urllib.parse
 
-    try:
-        encoded = urllib.parse.quote(query)
-        url = f"https://cn.bing.com/search?q={encoded}&count={min(max_results, 15)}"
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        })
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            html = resp.read().decode("utf-8", errors="replace")
+    engines = [
+        ("Bing", lambda q: f"https://cn.bing.com/search?q={urllib.parse.quote(q)}&count={min(max_results, 15)}"),
+        ("Sogou", lambda q: f"https://www.sogou.com/web?query={urllib.parse.quote(q)}"),
+    ]
 
-        results = _parse_bing_results(html, max_results)
-        if not results:
-            return f"No results found for '{query}'"
+    all_results = []
+    errors = []
 
-        lines = []
-        for i, (title, href, snippet) in enumerate(results):
-            lines.append(f"{i + 1}. {title}\n   {href}\n   {snippet}")
+    for engine_name, url_builder in engines:
+        try:
+            url = url_builder(query)
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            })
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                html = resp.read().decode("utf-8", errors="replace")
 
-        return "\n\n".join(lines)
-    except Exception as e:
-        return f"Bing search error: {e}"
+            if engine_name == "Bing":
+                results = _parse_bing_results(html, max_results)
+            else:
+                results = _parse_sogou_results(html, max_results)
 
+            if results:
+                all_results.extend(results)
+                break  # got results, stop trying other engines
+            else:
+                errors.append(f"{engine_name}: no results parsed")
+        except Exception as e:
+            errors.append(f"{engine_name}: {e}")
+
+    if not all_results:
+        return f"No results found for '{query}' ({'; '.join(errors)})"
+
+    lines = []
+    for i, (title, href, snippet) in enumerate(all_results[:max_results]):
+        lines.append(f"{i + 1}. {title}\n   {href}\n   {snippet}")
+
+    return "\n\n".join(lines)
+
+
+# ─── Bing Parser ───
 
 class _BingResultParser(HTMLParser):
     def __init__(self):
@@ -64,13 +85,9 @@ class _BingResultParser(HTMLParser):
         elif tag == "a" and self._in_h2 and "href" in attrs_dict:
             self._current_href = attrs_dict["href"]
         elif tag == "p" and not self._in_h2:
-            # Bing search snippets are in <p> tags outside <h2>
             self._in_p = True
             self._current_snippet = ""
             self._capture_snippet = True
-        elif tag == "strong" and self._in_p:
-            # skip bolded keywords in snippets
-            pass
 
     def handle_endtag(self, tag):
         if tag == "h2":
@@ -95,6 +112,64 @@ class _BingResultParser(HTMLParser):
 
 def _parse_bing_results(html: str, max_results: int) -> list[tuple[str, str, str]]:
     parser = _BingResultParser()
+    try:
+        parser.feed(html)
+    except Exception:
+        pass
+    return parser.results[:max_results]
+
+
+# ─── Sogou Parser ───
+
+class _SogouResultParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.results = []
+        self._in_result = False
+        self._in_title = False
+        self._in_snippet = False
+        self._current_title = ""
+        self._current_href = ""
+        self._current_snippet = ""
+
+    def handle_starttag(self, tag, attrs):
+        attrs_dict = dict(attrs)
+        cls = attrs_dict.get("class", "")
+        if tag == "div" and "rb" in cls:
+            self._in_result = True
+            self._current_title = ""
+            self._current_href = ""
+            self._current_snippet = ""
+        elif tag == "h3" and self._in_result:
+            self._in_title = True
+        elif tag == "a" and self._in_title and "href" in attrs_dict:
+            self._current_href = attrs_dict["href"]
+        elif tag == "p" and self._in_result and "str" in cls:
+            self._in_snippet = True
+
+    def handle_endtag(self, tag):
+        if tag == "div" and self._in_result:
+            self._in_result = False
+            if self._current_title and self._current_href:
+                self.results.append((
+                    self._current_title.strip(),
+                    self._current_href,
+                    self._current_snippet.strip(),
+                ))
+        elif tag == "h3":
+            self._in_title = False
+        elif tag == "p":
+            self._in_snippet = False
+
+    def handle_data(self, data):
+        if self._in_title:
+            self._current_title += data
+        elif self._in_snippet:
+            self._current_snippet += data
+
+
+def _parse_sogou_results(html: str, max_results: int) -> list[tuple[str, str, str]]:
+    parser = _SogouResultParser()
     try:
         parser.feed(html)
     except Exception:
@@ -162,7 +237,7 @@ class MCPGateway:
         ))
         self.register(ToolDefinition(
             name="search_engine",
-            description="Search the web using cn.bing.com. Returns titles, URLs, and snippets.",
+            description="Search the web using multi-engine fallback (Bing → Sogou). Returns titles, URLs, and snippets.",
             parameters={
                 "query": {"type": "string", "description": "Search query"},
                 "max_results": {"type": "integer", "description": "Max results (default: 10)"},
@@ -297,7 +372,7 @@ class MCPGateway:
 
     @staticmethod
     def _search_handler(query: str, max_results: int = 10) -> str:
-        return _bing_search(query, max_results)
+        return _search_multi_engine(query, max_results)
 
     @staticmethod
     def _webfetch_handler(url: str) -> str:
