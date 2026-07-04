@@ -15,27 +15,7 @@ class ToolDefinition:
     handler: Callable[..., Any]
 
 
-def _bing_api_search(query: str, max_results: int, api_key: str) -> str:
-    """通过 Bing Web Search API v7 搜索。需要 BING_API_KEY 环境变量。"""
-    import requests
-    try:
-        resp = requests.get(
-            "https://api.bing.microsoft.com/v7.0/search",
-            headers={"Ocp-Apim-Subscription-Key": api_key},
-            params={"q": query, "count": min(max_results, 50), "mkt": "zh-CN"},
-            timeout=15,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        results = []
-        for item in data.get("webPages", {}).get("value", []):
-            results.append(f"{item['name']}\n  {item['url']}\n  {item.get('snippet', '')}")
-        return "\n\n".join(results) if results else "No results found."
-    except Exception as e:
-        return f"Bing API error: {e}"
-
-
-def _bing_scrape_search(query: str, max_results: int) -> str:
+def _bing_search(query: str, max_results: int) -> str:
     """直接抓取 cn.bing.com 搜索结果页，用正则提取标题/URL/摘要。"""
     import urllib.request
     import urllib.parse
@@ -120,7 +100,7 @@ class MCPGateway:
         ))
         self.register(ToolDefinition(
             name="browser",
-            description="Placeholder for browser automation. In MVP, delegates to search_engine.",
+            description="Fetch a web page by URL. Returns page content as text.",
             parameters={
                 "url": {"type": "string", "description": "URL to open"},
                 "action": {"type": "string", "description": "Action: 'fetch' or 'search'"},
@@ -129,7 +109,7 @@ class MCPGateway:
         ))
         self.register(ToolDefinition(
             name="search_engine",
-            description="Search the web using DuckDuckGo. Returns search results.",
+            description="Search the web using cn.bing.com. Returns titles, URLs, and snippets.",
             parameters={
                 "query": {"type": "string", "description": "Search query"},
                 "max_results": {"type": "integer", "description": "Max results (default: 10)"},
@@ -257,13 +237,4 @@ class MCPGateway:
 
     @staticmethod
     def _search_handler(query: str, max_results: int = 10) -> str:
-        """搜索工具：Bing Search API（优先）→ Bing 页面抓取（降级）。"""
-        import os
-
-        # 优先用 Bing Search API
-        api_key = os.environ.get("BING_API_KEY", "")
-        if api_key:
-            return _bing_api_search(query, max_results, api_key)
-
-        # 降级：直接抓取 bing.com 搜索结果页
-        return _bing_scrape_search(query, max_results)
+        return _bing_search(query, max_results)
