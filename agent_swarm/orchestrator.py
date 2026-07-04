@@ -21,6 +21,15 @@ RETRYABLE_ERRORS = (
     ConnectionResetError,
 )
 
+JUDGE_SYSTEM_PROMPT = """你是一个质量评估专家。判断 Agent 的输出是否合格。
+
+评估标准：
+- 信息量: 输出是否包含实质性内容（不是空话、套话、"数据不足"、"未找到"）
+- 工具使用: 是否实际调用了工具并使用了工具返回的结果
+- 任务完成度: 输出是否回应了任务要求
+
+返回 JSON: {"pass": true/false, "reason": "一句话说明为什么"}"""
+
 
 class ResultAggregator:
     """汇总所有子任务结果，生成最终输出。"""
@@ -63,6 +72,8 @@ class SwarmOrchestrator:
         llm_base_url: str,
         llm_api_key: str,
         max_retries: int = 3,
+        max_subtask_retries: int = 2,
+        judge_model: str | None = None,
     ):
         self.gateway = gateway
         self.factory = factory
@@ -70,6 +81,8 @@ class SwarmOrchestrator:
         self.llm = AsyncOpenAI(base_url=llm_base_url, api_key=llm_api_key)
         self.aggregator = ResultAggregator()
         self.max_retries = max_retries
+        self.max_subtask_retries = max_subtask_retries
+        self.judge_model = judge_model  # None = skip quality gate
 
     async def execute(self, dag: TaskDAG) -> SwarmState:
         state = self.state_manager.initialize(dag.task_id, dag)
@@ -88,16 +101,63 @@ class SwarmOrchestrator:
                 f"Executing group {state.current_group + 1}/{len(dag.parallel_groups)}: {group}"
             )
 
-            tasks = []
-            for subtask_id in group:
-                subtask = self._find_subtask(dag, subtask_id)
-                agent = self.factory.create(subtask.agent_config)
-                context = self._gather_context(state, subtask.depends_on)
-                tasks.append(self._run_single_agent(subtask_id, agent, subtask.prompt, context))
+            # Self-correcting retry loop for the current parallel group
+            pending_ids = list(group)
+            results: dict[str, SubtaskResult] = {}
 
-            results: list[SubtaskResult] = await asyncio.gather(*tasks)
+            for attempt in range(self.max_subtask_retries + 1):  # 0 = first run
+                if not pending_ids:
+                    break
 
-            for result in results:
+                if attempt > 0:
+                    logger.info(f"  Retry #{attempt}: {pending_ids}")
+
+                batch = []
+                for subtask_id in pending_ids:
+                    subtask = self._find_subtask(dag, subtask_id)
+                    agent = self.factory.create(subtask.agent_config)
+                    context = self._gather_context(state, subtask.depends_on)
+                    # On retries, enrich the prompt with previous feedback
+                    prompt = subtask.prompt
+                    if attempt > 0 and subtask_id in results:
+                        prompt = self._regenerate_prompt(subtask.prompt, results[subtask_id], attempt)
+
+                    batch.append((subtask_id, self._run_single_agent(subtask_id, agent, prompt, context)))
+
+                batch_results = await asyncio.gather(
+                    *(t[1] for t in batch)
+                )
+                for (sid, _), result in zip(batch, batch_results):
+                    result.retry_count += attempt
+                    old = results.get(sid)
+                    if old:
+                        result.retry_history = old.retry_history + [f"Attempt {attempt}: JUDGE={self._judge_summary(result)}"]
+                    results[sid] = result
+
+                # Evaluate and determine which need retry
+                pending_ids = []
+                if self.judge_model:
+                    for sid, result in results.items():
+                        if result.state == SubtaskState.FAILED and attempt < self.max_subtask_retries:
+                            pending_ids.append(sid)
+                            logger.warning(f"  [{sid}] FAILED → will retry")
+                        elif result.state == SubtaskState.COMPLETED:
+                            passed, reason = await self._evaluate_output(
+                                self._find_subtask(dag, sid).prompt, result.output or ""
+                            )
+                            if not passed and attempt < self.max_subtask_retries:
+                                pending_ids.append(sid)
+                                logger.warning(f"  [{sid}] QUALITY LOW ({reason}) → will retry")
+                            else:
+                                logger.info(f"  [{sid}] Quality check: {'PASS' if passed else 'MAX RETRIES'}")
+                else:
+                    # No judge model → only retry FAILED
+                    pending_ids = [
+                        sid for sid, r in results.items()
+                        if r.state == SubtaskState.FAILED and attempt < self.max_subtask_retries
+                    ]
+
+            for result in results.values():
                 state = self.state_manager.update_subtask(state, result)
 
             self.state_manager.checkpoint(state)
@@ -105,6 +165,45 @@ class SwarmOrchestrator:
 
         self.state_manager.cleanup(dag.task_id, keep_latest=3)
         return state
+
+    # ─── Quality Gate ───
+
+    async def _evaluate_output(self, task_prompt: str, output: str) -> tuple[bool, str]:
+        """用小模型评估输出质量。返回 (pass, reason)。"""
+        user_prompt = f"任务要求: {task_prompt[:300]}\n\nAgent输出: {output[:600]}"
+        try:
+            resp = await self.llm.chat.completions.create(
+                model=self.judge_model,
+                messages=[
+                    {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.1,
+            )
+            raw = resp.choices[0].message.content or '{"pass":true,"reason":"parse error"}'
+            parsed = json.loads(raw)
+            return parsed.get("pass", True), parsed.get("reason", "")
+        except Exception:
+            return True, ""  # judge failed → let it pass
+
+    @staticmethod
+    def _regenerate_prompt(original: str, prev_result: SubtaskResult, attempt: int) -> str:
+        """根据上次失败/低质量结果，生成改进版的 prompt。"""
+        prev_output = (prev_result.output or "")[:200]
+        notes = []
+        if prev_result.state == SubtaskState.FAILED:
+            notes.append(f"上次执行失败: {prev_result.error}")
+        if "数据不足" in prev_output or "未找到" in prev_output or "信息不足" in prev_output:
+            notes.append("上次输出缺乏实质性内容，请尝试更换搜索策略或执行数据分析代码")
+        if notes:
+            return f"[第 {attempt + 1} 次尝试]\n{original}\n\n⚠️ 上次的问题: {'; '.join(notes)}\n请用不同的方法重新执行。"
+        return original
+
+    @staticmethod
+    def _judge_summary(result: SubtaskResult) -> str:
+        if result.state == SubtaskState.FAILED:
+            return f"FAILED: {result.error or 'unknown'}"
+        return f"COMPLETED ({len(result.output or '')} chars)"
 
     # ─── Agent 执行 ───
 

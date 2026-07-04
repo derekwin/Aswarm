@@ -43,6 +43,8 @@ class SubtaskResult(BaseModel):
     output: str | None = None
     error: str | None = None
     iterations_used: int = 0
+    retry_count: int = 0
+    retry_history: list[str] = Field(default_factory=list)
 
 
 class SwarmState(BaseModel):
