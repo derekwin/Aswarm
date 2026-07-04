@@ -1,7 +1,6 @@
 """MCP 工具网关 - 统一工具注册、发现、调用、权限控制。"""
 
 import asyncio
-import subprocess
 from typing import Any, Callable
 from dataclasses import dataclass
 import requests
@@ -131,6 +130,31 @@ def _parse_sogou_soup(soup: BeautifulSoup, max_results: int) -> list[tuple[str, 
     return results
 
 
+def _try_sandbox_run(cmd: list[str], timeout: int = 60) -> tuple[str, str, bool]:
+    """Execute command in Sandlock sandbox if available. Falls back to subprocess."""
+    import os as _os
+    try:
+        from sandlock import Sandbox
+        sandbox = Sandbox(
+            fs_writable=["/tmp/agent_swarm"],
+            fs_readable=["/usr", "/lib", "/lib64", "/etc", "/bin", "/tmp"],
+            max_memory="512M",
+            max_processes=10,
+            clean_env=True,
+        )
+        result = sandbox.run(cmd, timeout=timeout)
+        return result.stdout.decode("utf-8", errors="replace"), result.stderr.decode("utf-8", errors="replace"), result.success
+    except ImportError:
+        import subprocess
+        _os.makedirs("/tmp/agent_swarm", exist_ok=True)
+        proc = subprocess.run(
+            cmd, capture_output=True, timeout=timeout, cwd="/tmp/agent_swarm",
+        )
+        return proc.stdout.decode("utf-8", errors="replace"), proc.stderr.decode("utf-8", errors="replace"), proc.returncode == 0
+    except Exception as e:
+        return "", str(e), False
+
+
 class MCPGateway:
     """本地 MCP 工具网关。
 
@@ -256,24 +280,12 @@ class MCPGateway:
 
     @staticmethod
     def _shell_handler(command: str, timeout: int = 30) -> str:
-        """执行 Shell 命令（基础沙箱：工作目录限定）。"""
-        import os as _os
-        tmpdir = "/tmp/agent_swarm"
-        _os.makedirs(tmpdir, exist_ok=True)
-        try:
-            result = subprocess.run(
-                command, shell=True, capture_output=True, text=True,
-                timeout=timeout, cwd=tmpdir,
-            )
-            return f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
-        except subprocess.TimeoutExpired:
-            return f"Error: Command timed out after {timeout}s"
-        except Exception as e:
-            return f"Error: {e}"
+        stdout, stderr, ok = _try_sandbox_run(["sh", "-c", command], timeout)
+        prefix = "[SANDBOX] " if ok else "[SANDBOX FAILED] "
+        return f"{prefix}STDOUT:\n{stdout}\nSTDERR:\n{stderr}"
 
     @staticmethod
     def _python_handler(code: str, timeout: int = 60) -> str:
-        """执行 Python 代码。"""
         import tempfile
         import os as _os
         tmpdir = "/tmp/agent_swarm"
@@ -282,14 +294,9 @@ class MCPGateway:
             f.write(code)
             tmp_path = f.name
         try:
-            result = subprocess.run(
-                ["python3", tmp_path], capture_output=True, text=True, timeout=timeout
-            )
-            return f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
-        except subprocess.TimeoutExpired:
-            return f"Error: Code execution timed out after {timeout}s"
-        except Exception as e:
-            return f"Error: {e}"
+            stdout, stderr, ok = _try_sandbox_run(["python3", tmp_path], timeout)
+            prefix = "[SANDBOX] " if ok else "[SANDBOX FAILED] "
+            return f"{prefix}STDOUT:\n{stdout}\nSTDERR:\n{stderr}"
         finally:
             _os.unlink(tmp_path)
 
