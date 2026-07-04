@@ -52,8 +52,8 @@ async def main():
     # 发散检查：新任务是否偏离当前项目？
     warning = scheduler.check_if_divergent(query)
     if warning and warning.diverged:
-        print(f"\n⚠️  {warning.current_project}")
-        print(f"   新任务: {warning.new_task_summary}")
+        print(f"\n⚠️  Current project: {warning.current_project}")
+        print(f"   New task: {warning.new_task_summary}")
         print(f"   {warning.suggestion}")
         print()
 

@@ -132,6 +132,8 @@ class SwarmOrchestrator:
                     old = results.get(sid)
                     if old:
                         result.retry_history = old.retry_history + [f"Attempt {attempt}: JUDGE={self._judge_summary(result)}"]
+                        if result.state == SubtaskState.FAILED and not result.error and old.error:
+                            result.error = old.error  # preserve previous error info
                     results[sid] = result
 
                 # Evaluate and determine which need retry

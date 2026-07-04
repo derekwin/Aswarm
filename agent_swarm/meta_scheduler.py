@@ -136,12 +136,12 @@ class MetaScheduler:
         if overlap == 0 and len(keywords) > 3:
             return DivergenceWarning(
                 diverged=True,
-                current_project=f'当前项目: "{self._project_context[:80]}"',
-                new_task_summary=f'新任务: "{query[:80]}"',
+                current_project=f'"{self._project_context[:80]}"',
+                new_task_summary=f'"{query[:80]}"',
                 suggestion=(
-                    "检测到新任务与当前项目主题无关。"
-                    "建议为该任务创建独立项目目录（如 mkdir new-project/），"
-                    "避免与现有代码和 checkpoint 混淆。继续在当前目录执行？"
+                    "New task appears unrelated to current project. "
+                    "Consider creating a separate project directory (e.g. mkdir new-project/) "
+                    "to avoid mixing code and checkpoints with existing work. Continue in current directory?"
                 ),
             )
         return DivergenceWarning(diverged=False)
