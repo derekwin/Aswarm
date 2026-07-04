@@ -41,7 +41,6 @@ async def main():
         llm_base_url="http://localhost:11434/v1",
         llm_api_key="ollama",
         max_subtask_retries=2,
-        judge_model="qwen3:4b",  # 用小模型做质量裁判
     )
 
     # ── 设置项目上下文 ──
