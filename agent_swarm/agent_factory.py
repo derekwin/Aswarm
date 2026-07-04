@@ -1,7 +1,10 @@
 """Agent Factory - 根据 Decomposer 生成的 AgentConfig 动态实例化 Agent。"""
 
+import logging
 from agent_swarm.mcp_gateway import MCPGateway
 from agent_swarm.models import AgentConfig
+
+logger = logging.getLogger(__name__)
 
 
 class Agent:
@@ -59,8 +62,7 @@ class AgentFactory:
         invalid_tools = [t for t in config.tools if t not in available]
 
         if invalid_tools:
-            import logging
-            logging.warning(
+            logger.warning(
                 f"Agent '{config.name}': ignoring invalid tools {invalid_tools}. "
                 f"Available: {available}"
             )

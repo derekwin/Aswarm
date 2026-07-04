@@ -21,14 +21,14 @@ RETRYABLE_ERRORS = (
     ConnectionResetError,
 )
 
-JUDGE_SYSTEM_PROMPT = """你是一个质量评估专家。判断 Agent 的输出是否合格。
+JUDGE_SYSTEM_PROMPT = """You are a quality evaluator. Judge whether an Agent's output meets requirements.
 
-评估标准：
-- 信息量: 输出是否包含实质性内容（不是空话、套话、"数据不足"、"未找到"）
-- 工具使用: 是否实际调用了工具并使用了工具返回的结果
-- 任务完成度: 输出是否回应了任务要求
+Evaluation criteria:
+- Information density: does the output contain substantive content (not filler, not "no data found", not "insufficient information")
+- Tool usage: did the agent actually call tools and use the returned results
+- Task completion: does the output address the task requirements
 
-返回 JSON: {"pass": true/false, "reason": "一句话说明为什么"}"""
+Return JSON: {"pass": true/false, "reason": "one sentence explaining why"}"""
 
 
 class ResultAggregator:
@@ -169,8 +169,7 @@ class SwarmOrchestrator:
     # ─── Quality Gate ───
 
     async def _evaluate_output(self, task_prompt: str, output: str) -> tuple[bool, str]:
-        """用小模型评估输出质量。返回 (pass, reason)。"""
-        user_prompt = f"任务要求: {task_prompt[:300]}\n\nAgent输出: {output[:600]}"
+        user_prompt = f"Task requirement: {task_prompt[:300]}\n\nAgent output: {output[:600]}"
         try:
             resp = await self.llm.chat.completions.create(
                 model=self.judge_model,
@@ -188,15 +187,16 @@ class SwarmOrchestrator:
 
     @staticmethod
     def _regenerate_prompt(original: str, prev_result: SubtaskResult, attempt: int) -> str:
-        """根据上次失败/低质量结果，生成改进版的 prompt。"""
         prev_output = (prev_result.output or "")[:200]
         notes = []
         if prev_result.state == SubtaskState.FAILED:
-            notes.append(f"上次执行失败: {prev_result.error}")
-        if "数据不足" in prev_output or "未找到" in prev_output or "信息不足" in prev_output:
-            notes.append("上次输出缺乏实质性内容，请尝试更换搜索策略或执行数据分析代码")
+            notes.append(f"Previous attempt failed: {prev_result.error}")
+        low_quality_signals = ["data insufficient", "no data found", "information insufficient",
+                               "not found", "no results", "数据不足", "未找到", "信息不足"]
+        if any(signal.lower() in prev_output.lower() for signal in low_quality_signals):
+            notes.append("Previous output lacked substantive content — try different search strategy or execute analysis code")
         if notes:
-            return f"[第 {attempt + 1} 次尝试]\n{original}\n\n⚠️ 上次的问题: {'; '.join(notes)}\n请用不同的方法重新执行。"
+            return f"[Attempt {attempt + 1}]\n{original}\n\nPrevious issues: {'; '.join(notes)}\nRetry with a different approach."
         return original
 
     @staticmethod
@@ -262,8 +262,8 @@ class SwarmOrchestrator:
             iterations_used=iteration,
         )
 
-    async def _call_llm_with_retry(self, model: str, messages: list, tools: list):
-        last_error = None
+    async def _call_llm_with_retry(self, model: str, messages: list[dict], tools: list[dict]):
+        last_error: Exception | None = None
         for attempt in range(self.max_retries):
             try:
                 kwargs = {
@@ -286,7 +286,7 @@ class SwarmOrchestrator:
                 )
                 await asyncio.sleep(wait)
 
-            except Exception as e:
+            except Exception:
                 raise  # non-retryable, propagate immediately
 
         raise last_error

@@ -29,4 +29,5 @@ __all__ = [
     "SwarmState",
     "SubtaskState",
     "SubtaskResult",
+    "DivergenceWarning",
 ]

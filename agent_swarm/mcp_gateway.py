@@ -1,10 +1,18 @@
 """MCP 工具网关 - 统一工具注册、发现、调用、权限控制。"""
 
 import asyncio
+import logging
+import os
 from typing import Any, Callable
 from dataclasses import dataclass
+from urllib.parse import urlparse, parse_qs, urlunparse
+
 import requests
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger(__name__)
+
+SANDBOX_TMPDIR = "/tmp/agent_swarm"
 
 SESSION = requests.Session()
 SESSION.headers.update({
@@ -44,6 +52,7 @@ def _search_multi_engine(query: str, max_results: int) -> str:
             errors.append(f"{name}: {e}")
 
     if not all_results:
+        logger.warning(f"All search engines failed for '{query[:50]}': {'; '.join(errors)}")
         return f"No results found for '{query}' ({'; '.join(errors)})"
 
     lines = []
@@ -62,8 +71,11 @@ def _search_bing(query: str, max_results: int) -> tuple[list[tuple[str, str, str
         )
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
-        return _parse_bing_soup(soup, max_results), ""
+        results = _parse_bing_soup(soup, max_results)
+        logger.debug(f"Bing search '{query[:50]}' → {len(results)} results")
+        return results, ""
     except Exception as e:
+        logger.warning(f"Bing search failed for '{query[:50]}': {e}")
         return [], str(e)
 
 
@@ -76,8 +88,11 @@ def _search_sogou(query: str, max_results: int) -> tuple[list[tuple[str, str, st
         )
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
-        return _parse_sogou_soup(soup, max_results), ""
+        results = _parse_sogou_soup(soup, max_results)
+        logger.debug(f"Sogou search '{query[:50]}' → {len(results)} results")
+        return results, ""
     except Exception as e:
+        logger.warning(f"Sogou search failed for '{query[:50]}': {e}")
         return [], str(e)
 
 
@@ -100,7 +115,6 @@ def _parse_bing_soup(soup: BeautifulSoup, max_results: int) -> list[tuple[str, s
 
 
 def _clean_bing_url(raw: str) -> str:
-    from urllib.parse import urlparse, parse_qs, urlunparse
     if not raw or not raw.startswith("http"):
         return ""
     parsed = urlparse(raw)
@@ -131,12 +145,10 @@ def _parse_sogou_soup(soup: BeautifulSoup, max_results: int) -> list[tuple[str, 
 
 
 def _try_sandbox_run(cmd: list[str], timeout: int = 60) -> tuple[str, str, bool]:
-    """Execute command in Sandlock sandbox if available. Falls back to subprocess."""
-    import os as _os
     try:
         from sandlock import Sandbox
         sandbox = Sandbox(
-            fs_writable=["/tmp/agent_swarm"],
+            fs_writable=[SANDBOX_TMPDIR],
             fs_readable=["/usr", "/lib", "/lib64", "/etc", "/bin", "/tmp"],
             max_memory="512M",
             max_processes=10,
@@ -145,13 +157,23 @@ def _try_sandbox_run(cmd: list[str], timeout: int = 60) -> tuple[str, str, bool]
         result = sandbox.run(cmd, timeout=timeout)
         return result.stdout.decode("utf-8", errors="replace"), result.stderr.decode("utf-8", errors="replace"), result.success
     except ImportError:
+        logger.debug("Sandlock not installed, falling back to subprocess")
         import subprocess
-        _os.makedirs("/tmp/agent_swarm", exist_ok=True)
+        os.makedirs(SANDBOX_TMPDIR, exist_ok=True)
         proc = subprocess.run(
-            cmd, capture_output=True, timeout=timeout, cwd="/tmp/agent_swarm",
+            cmd, capture_output=True, timeout=timeout, cwd=SANDBOX_TMPDIR,
+        )
+        return proc.stdout.decode("utf-8", errors="replace"), proc.stderr.decode("utf-8", errors="replace"), proc.returncode == 0
+    except ModuleNotFoundError:
+        logger.warning("Sandlock import failed (broken installation), falling back to subprocess")
+        import subprocess
+        os.makedirs(SANDBOX_TMPDIR, exist_ok=True)
+        proc = subprocess.run(
+            cmd, capture_output=True, timeout=timeout, cwd=SANDBOX_TMPDIR,
         )
         return proc.stdout.decode("utf-8", errors="replace"), proc.stderr.decode("utf-8", errors="replace"), proc.returncode == 0
     except Exception as e:
+        logger.error(f"Sandbox execution failed: {e}")
         return "", str(e), False
 
 
@@ -287,10 +309,8 @@ class MCPGateway:
     @staticmethod
     def _python_handler(code: str, timeout: int = 60) -> str:
         import tempfile
-        import os as _os
-        tmpdir = "/tmp/agent_swarm"
-        _os.makedirs(tmpdir, exist_ok=True)
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", dir=tmpdir, delete=False) as f:
+        os.makedirs(SANDBOX_TMPDIR, exist_ok=True)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", dir=SANDBOX_TMPDIR, delete=False) as f:
             f.write(code)
             tmp_path = f.name
         try:
@@ -298,7 +318,7 @@ class MCPGateway:
             prefix = "[SANDBOX] " if ok else "[SANDBOX FAILED] "
             return f"{prefix}STDOUT:\n{stdout}\nSTDERR:\n{stderr}"
         finally:
-            _os.unlink(tmp_path)
+            os.unlink(tmp_path)
 
     @staticmethod
     def _file_reader_handler(path: str, encoding: str = "utf-8") -> str:
@@ -311,10 +331,8 @@ class MCPGateway:
 
     @staticmethod
     def _file_writer_handler(path: str, content: str, encoding: str = "utf-8") -> str:
-        """写入文件。"""
-        import os as _os
         try:
-            _os.makedirs(_os.path.dirname(path) or ".", exist_ok=True)
+            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
             with open(path, "w", encoding=encoding) as f:
                 f.write(content)
             return f"File written: {path} ({len(content)} bytes)"
@@ -323,12 +341,12 @@ class MCPGateway:
 
     @staticmethod
     def _browser_handler(url: str) -> str:
-        import urllib.request
         try:
-            with urllib.request.urlopen(url, timeout=15) as resp:
-                body = resp.read().decode("utf-8", errors="replace")
-                return body[:5000]
+            resp = SESSION.get(url, timeout=15)
+            resp.raise_for_status()
+            return resp.text[:5000]
         except Exception as e:
+            logger.warning(f"Browser fetch failed for {url}: {e}")
             return f"Error fetching {url}: {e}"
 
     @staticmethod
@@ -345,7 +363,6 @@ class MCPGateway:
             for tag in soup(["script", "style", "nav", "footer", "header", "noscript"]):
                 tag.decompose()
 
-            # Priority: article > main > body text
             content_el = (
                 soup.select_one("article") or
                 soup.select_one('[role="main"]') or
@@ -357,6 +374,9 @@ class MCPGateway:
 
             import re
             text = re.sub(r"\n{3,}", "\n\n", text).strip()
-            return text[:8000] if len(text) > 8000 else text
+            text = text[:8000] if len(text) > 8000 else text
+            logger.debug(f"Webfetch '{url[:60]}' → {len(text)} chars")
+            return text
         except Exception as e:
+            logger.warning(f"Webfetch failed for '{url[:60]}': {e}")
             return f"Error fetching {url}: {e}"

@@ -9,7 +9,7 @@ import uuid
 import re
 from openai import AsyncOpenAI
 
-from agent_swarm.models import TaskDAG, AgentConfig, Subtask, DivergenceWarning
+from agent_swarm.models import TaskDAG, Subtask, DivergenceWarning
 from agent_swarm.prompts.classifier import CLASSIFIER_SYSTEM_PROMPT, CLASSIFIER_USER_TEMPLATE
 from agent_swarm.prompts.decomposer import (
     DECOMPOSER_SYSTEM_PROMPT,
