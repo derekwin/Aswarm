@@ -210,29 +210,51 @@ class SwarmOrchestrator:
 
     # ─── Agent 执行 ───
 
+    MAX_SEARCH_ROUNDS = 4  # hard limit: force output after this many searches
+
     async def _run_single_agent(
         self, subtask_id: str, agent: Agent, prompt: str, context: str = ""
     ) -> SubtaskResult:
         messages = self._build_messages(agent, prompt, context)
         tools = self._build_tools_schema(agent)
+        has_search_tool = "search_engine" in agent.tool_names()
 
         iteration = 0
         final_output = ""
+        search_count = 0
+        active_tools = tools  # may be stripped on forced-output iteration
 
         while iteration < agent.max_iterations:
             iteration += 1
+
+            # Force output: if search agent has searched enough, remove tools
+            if has_search_tool and search_count >= self.MAX_SEARCH_ROUNDS:
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        f"You have already searched {search_count} times. "
+                        "STOP searching. Produce your final output NOW with the best information you have."
+                    ),
+                })
+                active_tools = []  # force text-only response
+                has_search_tool = False  # prevent repeated forced-output messages
 
             try:
                 response = await self._call_llm_with_retry(
                     model=agent.model,
                     messages=messages,
-                    tools=tools,
+                    tools=active_tools,
                 )
 
                 msg = response.choices[0].message
 
                 if msg.tool_calls:
                     messages = await self._handle_tool_calls(agent, msg.tool_calls, messages)
+                    # Count search_engine calls for enforcement
+                    search_count += sum(
+                        1 for tc in (msg.tool_calls or [])
+                        if tc.function.name == "search_engine"
+                    )
                 else:
                     final_output = msg.content or ""
                     messages.append({"role": "assistant", "content": final_output})
