@@ -151,10 +151,15 @@ class SwarmOrchestrator:
                     final_output = m["content"]
                     break
 
+        exhausted = iteration >= agent.max_iterations and not final_output
         return SubtaskResult(
             subtask_id=subtask_id,
             state=SubtaskState.COMPLETED if final_output else SubtaskState.FAILED,
             output=final_output or "No output generated",
+            error=(
+                f"Agent exhausted {agent.max_iterations} iterations without producing output"
+                if exhausted else None
+            ),
             iterations_used=iteration,
         )
 
@@ -278,18 +283,20 @@ class SwarmOrchestrator:
                 "numpy, pandas, matplotlib, requests, json, csv, os, re, math,",
                 "datetime, collections, itertools, pathlib, io, textwrap, hashlib",
                 "",
-                "**重要**: matplotlib 可以生成图表，使用 `plt.savefig()` 保存图片文件。",
-                "数据分析和计算任务必须用 python_executor 执行，不要「推断」或「假设」结果。",
+                "**必须用 python_executor 执行代码**。禁止凭想象推断结果。",
+                "matplotlib 可生成图表: `plt.savefig('chart.png')`",
+                "即便数据不完整，也必须运行代码输出已有数据的分析，而不是空说「数据不足」。",
             ])
         
         if "search_engine" in tool_names:
             parts.extend([
                 "",
-                "## 搜索与信息获取策略",
-                "1. 先用 search_engine 搜索关键词，获取 URL 列表",
-                "2. 对有价值的页面用 webfetch 获取全文阅读",
-                "3. 如果搜索结果不满意，换角度/换关键词重新搜索，不要轻易放弃",
-                "4. 至少尝试 2-3 轮搜索后才下结论",
+                "## 搜索与信息获取（必须严格遵守）",
+                "1. 第一步: 用 search_engine 搜索",
+                "2. 第二步: 对搜索结果中的 URL 用 webfetch 获取完整页面内容",
+                "3. 如果 webfetch 获取不到有效信息，换关键词搜索第二轮",
+                "4. 禁止: 只搜索不抓取，然后说「信息不足」",
+                "5. 每轮搜索后必须调用 webfetch 至少一次",
             ])
         
         return "\n".join(parts)
