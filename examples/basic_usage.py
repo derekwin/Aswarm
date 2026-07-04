@@ -2,7 +2,7 @@
 
 使用前确保:
 1. 本地已启动 Ollama: ollama serve
-2. 已拉取模型: ollama pull qwen3:4b && ollama pull qwen3:14b
+2. 已拉取模型: ollama pull qwen3:4b && ollama pull qwen3:8b
 """
 
 import asyncio
@@ -22,14 +22,14 @@ logger = logging.getLogger(__name__)
 async def main():
     # ── 初始化 ──
     gateway = MCPGateway()
-    factory = AgentFactory(gateway=gateway, default_model="qwen3:14b")
+    factory = AgentFactory(gateway=gateway, default_model="qwen3:8b")
     state_manager = StateManager()
 
     scheduler = MetaScheduler(
         base_url="http://localhost:11434/v1",
         api_key="ollama",
         classifier_model="qwen3:4b",
-        decomposer_model="qwen3:14b",
+        decomposer_model="qwen3:8b",
     )
 
     orchestrator = SwarmOrchestrator(

@@ -70,13 +70,3 @@ class TestStateManager:
         manager = StateManager()
         with pytest.raises(FileNotFoundError):
             manager.resume("nonexistent_task")
-
-    def test_shared_context(self, sample_dag):
-        manager = StateManager()
-        state = manager.initialize("test_001", sample_dag)
-
-        state.shared_context["key1"] = "value1"
-        state.shared_context["key2"] = {"nested": True}
-
-        assert state.shared_context["key1"] == "value1"
-        assert state.shared_context["key2"]["nested"] is True

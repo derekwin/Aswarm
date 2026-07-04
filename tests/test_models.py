@@ -80,7 +80,6 @@ class TestSwarmState:
         state = SwarmState(task_id="s001", dag=dag)
         assert state.current_group == 0
         assert state.subtask_results == {}
-        assert state.shared_context == {}
 
     def test_update_subtask_result(self):
         config = AgentConfig(name="a", role="r", system_prompt="p", tools=["t"])

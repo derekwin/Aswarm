@@ -2,6 +2,7 @@
 
 import asyncio
 import subprocess
+from html.parser import HTMLParser
 from typing import Any, Callable
 from dataclasses import dataclass
 
@@ -16,10 +17,9 @@ class ToolDefinition:
 
 
 def _bing_search(query: str, max_results: int) -> str:
-    """直接抓取 cn.bing.com 搜索结果页，用正则提取标题/URL/摘要。"""
     import urllib.request
     import urllib.parse
-    import re
+
     try:
         encoded = urllib.parse.quote(query)
         url = f"https://cn.bing.com/search?q={encoded}&count={min(max_results, 15)}"
@@ -29,23 +29,77 @@ def _bing_search(query: str, max_results: int) -> str:
         with urllib.request.urlopen(req, timeout=15) as resp:
             html = resp.read().decode("utf-8", errors="replace")
 
-        # 提取搜索结果：<h2> 中的标题和链接 + <p> 中的摘要
-        results = re.findall(
-            r'<h2[^>]*>.*?<a[^>]*href="([^"]*)"[^>]*>(.*?)</a>.*?</h2>\s*.*?<p[^>]*>(.*?)</p>',
-            html, re.DOTALL | re.IGNORECASE
-        )
+        results = _parse_bing_results(html, max_results)
         if not results:
-            return f"No results found for '{query}' (page may require JS or be blocked)"
+            return f"No results found for '{query}'"
 
         lines = []
-        for i, (url, title, snippet) in enumerate(results[:max_results]):
-            title_clean = re.sub(r'<[^>]+>', '', title).strip()
-            snippet_clean = re.sub(r'<[^>]+>', '', snippet).strip()
-            lines.append(f"{i + 1}. {title_clean}\n   {url}\n   {snippet_clean}")
+        for i, (title, href, snippet) in enumerate(results):
+            lines.append(f"{i + 1}. {title}\n   {href}\n   {snippet}")
 
         return "\n\n".join(lines)
     except Exception as e:
         return f"Bing search error: {e}"
+
+
+class _BingResultParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.results = []
+        self._in_h2 = False
+        self._in_p = False
+        self._current_title = ""
+        self._current_href = ""
+        self._current_snippet = ""
+        self._capture_title = False
+        self._capture_snippet = False
+
+    def handle_starttag(self, tag, attrs):
+        attrs_dict = dict(attrs)
+        if tag == "h2":
+            self._in_h2 = True
+            self._current_title = ""
+            self._current_href = ""
+            self._capture_title = True
+        elif tag == "a" and self._in_h2 and "href" in attrs_dict:
+            self._current_href = attrs_dict["href"]
+        elif tag == "p" and not self._in_h2:
+            # Bing search snippets are in <p> tags outside <h2>
+            self._in_p = True
+            self._current_snippet = ""
+            self._capture_snippet = True
+        elif tag == "strong" and self._in_p:
+            # skip bolded keywords in snippets
+            pass
+
+    def handle_endtag(self, tag):
+        if tag == "h2":
+            self._in_h2 = False
+            if self._current_title and self._current_href:
+                self.results.append((
+                    self._current_title.strip(),
+                    self._current_href,
+                    self._current_snippet.strip(),
+                ))
+            self._capture_title = False
+        elif tag == "p":
+            self._in_p = False
+            self._capture_snippet = False
+
+    def handle_data(self, data):
+        if self._capture_title:
+            self._current_title += data
+        elif self._capture_snippet:
+            self._current_snippet += data
+
+
+def _parse_bing_results(html: str, max_results: int) -> list[tuple[str, str, str]]:
+    parser = _BingResultParser()
+    try:
+        parser.feed(html)
+    except Exception:
+        pass
+    return parser.results[:max_results]
 
 
 class MCPGateway:
@@ -103,7 +157,6 @@ class MCPGateway:
             description="Fetch a web page by URL. Returns page content as text.",
             parameters={
                 "url": {"type": "string", "description": "URL to open"},
-                "action": {"type": "string", "description": "Action: 'fetch' or 'search'"},
             },
             handler=self._browser_handler,
         ))
@@ -225,8 +278,7 @@ class MCPGateway:
             return f"Error writing file: {e}"
 
     @staticmethod
-    def _browser_handler(url: str, action: str = "fetch") -> str:
-        """浏览器工具（MVP 占位）。"""
+    def _browser_handler(url: str) -> str:
         import urllib.request
         try:
             with urllib.request.urlopen(url, timeout=15) as resp:

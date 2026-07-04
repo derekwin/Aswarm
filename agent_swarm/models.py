@@ -1,5 +1,4 @@
 from enum import Enum
-from typing import Any
 from pydantic import BaseModel, Field
 
 
@@ -52,5 +51,4 @@ class SwarmState(BaseModel):
     dag: TaskDAG
     current_group: int = 0
     subtask_results: dict[str, SubtaskResult] = Field(default_factory=dict)
-    shared_context: dict[str, Any] = Field(default_factory=dict)
     checkpoint_path: str | None = None
