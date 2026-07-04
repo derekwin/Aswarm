@@ -22,6 +22,7 @@ RETRYABLE_ERRORS = (
 )
 
 JUDGE_SYSTEM_PROMPT = """You are a quality evaluator. Judge whether an Agent's output meets requirements.
+Respond in English only.
 
 Evaluation criteria:
 - Information density: does the output contain substantive content (not filler, not "no data found", not "insufficient information")

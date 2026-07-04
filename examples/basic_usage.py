@@ -2,7 +2,8 @@
 
 使用前确保:
 1. 本地已启动 Ollama: ollama serve
-2. 已拉取模型: ollama pull qwen3:4b && ollama pull qwen3:8b
+2. 已拉取模型: ollama pull qwen3:4b && ollama pull qwen3.5:35b
+3. 建议至少 24GB 显存/内存用于 35B 模型
 
 演示: 项目上下文感知 — 检测到无关任务时提醒用户创建独立项目目录。
 """
@@ -24,14 +25,14 @@ logger = logging.getLogger(__name__)
 async def main():
     # ── 初始化 ──
     gateway = MCPGateway()
-    factory = AgentFactory(gateway=gateway, default_model="qwen3:8b")
+    factory = AgentFactory(gateway=gateway, default_model="qwen3.5:35b")
     state_manager = StateManager()
 
     scheduler = MetaScheduler(
         base_url="http://localhost:11434/v1",
         api_key="ollama",
         classifier_model="qwen3:4b",
-        decomposer_model="qwen3:8b",
+        decomposer_model="qwen3.5:35b",
     )
 
     orchestrator = SwarmOrchestrator(

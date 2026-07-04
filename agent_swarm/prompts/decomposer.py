@@ -11,6 +11,7 @@ Rules:
 - Tools can only be selected from: browser, python_executor, file_reader, file_writer, shell, search_engine, webfetch
 - Subtasks within each parallel_group must have no mutual dependencies
 - Keep subtask count between 3 and 7
+- Search/web research agents should use max_iterations 8-10; code/data agents use 5-7; writer agents use 3-5
 - Agent system_prompts MUST include: strategy for handling difficulties (e.g., retry with different keywords if search results are poor)
 - Search agents MUST have search_engine + webfetch tools, instructed to: search first → webfetch key pages → synthesize
 - Data analysis agents MUST have python_executor, with explicit mention of available sandbox libraries
