@@ -218,12 +218,11 @@ class MetaScheduler:
 
     @staticmethod
     def _build_few_shot() -> str:
-        """构建 few-shot 示例文本。"""
-        lines = ["以下是几个任务拆分的示例:\n"]
+        lines = ["Here are some task decomposition examples:\n"]
         for i, example in enumerate(FEW_SHOT_EXAMPLES, 1):
-            lines.append(f"[示例 {i}]")
-            lines.append(f"用户: {example['query']}")
-            lines.append(f"输出: {json.dumps(example['output'], ensure_ascii=False, indent=2)}")
+            lines.append(f"[Example {i}]")
+            lines.append(f"User: {example['query']}")
+            lines.append(f"Output: {json.dumps(example['output'], ensure_ascii=False, indent=2)}")
             lines.append("")
         return "\n".join(lines)
 

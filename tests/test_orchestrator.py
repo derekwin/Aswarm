@@ -77,6 +77,7 @@ class TestSwarmOrchestrator:
             state_manager=state_manager,
             llm_base_url="http://localhost:11434/v1",
             llm_api_key="ollama",
+            judge_model=None,  # disable quality gate in tests
         )
 
         async def mock_run_agent(subtask_id, agent, prompt, context):
@@ -103,6 +104,7 @@ class TestSwarmOrchestrator:
             state_manager=state_manager,
             llm_base_url="http://localhost:11434/v1",
             llm_api_key="ollama",
+            judge_model=None,  # disable quality gate in tests
         )
 
         # Pre-populate a checkpoint (simulate group 1 completed)

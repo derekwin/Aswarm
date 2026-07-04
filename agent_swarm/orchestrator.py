@@ -73,7 +73,7 @@ class SwarmOrchestrator:
         llm_api_key: str,
         max_retries: int = 3,
         max_subtask_retries: int = 2,
-        judge_model: str | None = None,
+        judge_model: str = "qwen3:4b",
     ):
         self.gateway = gateway
         self.factory = factory
@@ -359,14 +359,13 @@ class SwarmOrchestrator:
         if context:
             messages.append({
                 "role": "system",
-                "content": f"上游Agent的输出（参考上下文）:\n{context}",
+                "content": f"Output from upstream agents (reference context):\n{context}",
             })
         messages.append({"role": "user", "content": prompt})
         return messages
 
     def _build_capabilities_block(self, tool_names: list[str]) -> str:
-        """构建工具能力注入块（类似 Claude Code 的工具清单）。"""
-        parts = ["\n\n---", "## 可用工具与沙箱环境", ""]
+        parts = ["\n\n---", "## Available Tools & Sandbox Environment", ""]
         
         for name in tool_names:
             try:
@@ -378,24 +377,24 @@ class SwarmOrchestrator:
         if "python_executor" in tool_names:
             parts.extend([
                 "",
-                "## Python 沙箱可用库",
+                "## Python Sandbox Libraries",
                 "numpy, pandas, matplotlib, requests, json, csv, os, re, math,",
                 "datetime, collections, itertools, pathlib, io, textwrap, hashlib",
                 "",
-                "**必须用 python_executor 执行代码**。禁止凭想象推断结果。",
-                "matplotlib 可生成图表: `plt.savefig('chart.png')`",
-                "即便数据不完整，也必须运行代码输出已有数据的分析，而不是空说「数据不足」。",
+                "MUST use python_executor to run actual code. Do NOT guess or infer results.",
+                "matplotlib can generate charts: plt.savefig('chart.png')",
+                "Even with incomplete data, run code on available data instead of claiming 'insufficient data'.",
             ])
         
         if "search_engine" in tool_names:
             parts.extend([
                 "",
-                "## 搜索与信息获取（必须严格遵守）",
-                "1. 第一步: 用 search_engine 搜索",
-                "2. 第二步: 对搜索结果中的 URL 用 webfetch 获取完整页面内容",
-                "3. 如果 webfetch 获取不到有效信息，换关键词搜索第二轮",
-                "4. 禁止: 只搜索不抓取，然后说「信息不足」",
-                "5. 每轮搜索后必须调用 webfetch 至少一次",
+                "## Search & Information Retrieval (MUST follow)",
+                "1. Step 1: Use search_engine to search",
+                "2. Step 2: Use webfetch to retrieve full page content from URLs in search results",
+                "3. Step 3: If webfetch yields no useful info, retry with different keywords",
+                "4. FORBIDDEN: searching without fetching, then claiming 'no information found'",
+                "5. After each search round, call webfetch at least once",
             ])
         
         return "\n".join(parts)
