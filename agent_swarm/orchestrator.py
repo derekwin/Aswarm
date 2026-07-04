@@ -398,6 +398,7 @@ class SwarmOrchestrator:
                 "3. Step 3: If webfetch yields no useful info, retry with different keywords",
                 "4. FORBIDDEN: searching without fetching, then claiming 'no information found'",
                 "5. After each search round, call webfetch at least once",
+                "6. CRITICAL: After 4 search rounds, STOP searching and produce your best output with whatever data you have. Do NOT exhaust all iterations searching.",
             ])
         
         return "\n".join(parts)

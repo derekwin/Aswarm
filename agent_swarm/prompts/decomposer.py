@@ -13,7 +13,7 @@ Rules:
 - Keep subtask count between 3 and 7
 - Search/web research agents should use max_iterations 8-10; code/data agents use 5-7; writer agents use 3-5
 - Agent system_prompts MUST include: strategy for handling difficulties (e.g., retry with different keywords if search results are poor)
-- Search agents MUST have search_engine + webfetch tools, instructed to: search first → webfetch key pages → synthesize
+- Search agents MUST have search_engine + webfetch tools, instructed to: search first → webfetch key pages → synthesize. After 4 search rounds, STOP and output best available results regardless of completeness.
 - Data analysis agents MUST have python_executor, with explicit mention of available sandbox libraries
 - Output strictly as JSON, no extra text"""
 
