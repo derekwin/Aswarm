@@ -9,7 +9,7 @@ import uuid
 import re
 from openai import AsyncOpenAI
 
-from agent_swarm.models import TaskDAG, AgentConfig, Subtask
+from agent_swarm.models import TaskDAG, AgentConfig, Subtask, DivergenceWarning
 from agent_swarm.prompts.classifier import CLASSIFIER_SYSTEM_PROMPT, CLASSIFIER_USER_TEMPLATE
 from agent_swarm.prompts.decomposer import (
     DECOMPOSER_SYSTEM_PROMPT,
@@ -113,6 +113,38 @@ class MetaScheduler:
         self.classifier_model = classifier_model
         self.decomposer_model = decomposer_model
         self.router = Router()
+        self._project_context: str | None = None
+
+    def set_project(self, description: str):
+        self._project_context = description
+
+    def check_if_divergent(self, query: str) -> DivergenceWarning | None:
+        if not self._project_context:
+            return None
+
+        context_lower = self._project_context.lower()
+        query_lower = query.lower()
+
+        # 简单启发式：提取项目描述中的关键词，检查新查询是否含这些词
+        keywords = set(context_lower.split()) - {
+            "的", "和", "与", "在", "是", "了", "the", "a", "an", "is", "of", "to", "in", "for"
+        }
+        # 保留有意义的词（长度 > 1 的字母/中文词）
+        keywords = {k for k in keywords if len(k) > 1}
+
+        overlap = sum(1 for kw in keywords if kw in query_lower)
+        if overlap == 0 and len(keywords) > 3:
+            return DivergenceWarning(
+                diverged=True,
+                current_project=f'当前项目: "{self._project_context[:80]}"',
+                new_task_summary=f'新任务: "{query[:80]}"',
+                suggestion=(
+                    "检测到新任务与当前项目主题无关。"
+                    "建议为该任务创建独立项目目录（如 mkdir new-project/），"
+                    "避免与现有代码和 checkpoint 混淆。继续在当前目录执行？"
+                ),
+            )
+        return DivergenceWarning(diverged=False)
 
     async def process(self, query: str) -> TaskDAG:
         """完整处理流水线: classify → decompose → validate。"""

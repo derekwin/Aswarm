@@ -46,9 +46,15 @@ class SubtaskResult(BaseModel):
 
 
 class SwarmState(BaseModel):
-    """整个 Swarm 的运行时状态。"""
     task_id: str
     dag: TaskDAG
     current_group: int = 0
     subtask_results: dict[str, SubtaskResult] = Field(default_factory=dict)
     checkpoint_path: str | None = None
+
+
+class DivergenceWarning(BaseModel):
+    diverged: bool = False
+    current_project: str = ""
+    new_task_summary: str = ""
+    suggestion: str = ""

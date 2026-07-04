@@ -2,7 +2,7 @@
 
 from agent_swarm.models import (
     TaskDAG, Subtask, AgentConfig, SwarmState,
-    SubtaskState, SubtaskResult,
+    SubtaskState, SubtaskResult, DivergenceWarning,
 )
 from agent_swarm.meta_scheduler import MetaScheduler, Router
 from agent_swarm.orchestrator import SwarmOrchestrator, ResultAggregator
