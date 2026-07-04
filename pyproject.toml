@@ -21,6 +21,10 @@ dev = [
     "pytest-asyncio>=0.23",
     "ruff>=0.3",
 ]
+web = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+]
 sandbox = [
     "sandlock>=0.8",
 ]

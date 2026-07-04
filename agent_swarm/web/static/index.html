@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentSwarm Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; max-width: 1200px; margin: 0 auto; }
+h1 { font-size: 1.5rem; margin-bottom: 16px; color: #58a6ff; }
+form { display: flex; gap: 8px; margin-bottom: 20px; }
+input[type=text] { flex: 1; padding: 10px 14px; font-size: 1rem; background: #161b22; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; }
+button { padding: 10px 20px; font-size: 1rem; background: #238636; border: none; border-radius: 6px; color: white; cursor: pointer; font-weight: 600; }
+button:hover { background: #2ea043; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+#status { margin-bottom: 12px; padding: 8px 12px; background: #161b22; border-radius: 6px; font-size: 0.9rem; }
+.dag-container { background: #161b22; border-radius: 8px; padding: 16px; margin-bottom: 20px; display: none; }
+.dag-container.show { display: block; }
+.agent-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.agent-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px; transition: border-color 0.3s; }
+.agent-card.running { border-color: #58a6ff; }
+.agent-card.completed { border-color: #238636; }
+.agent-card.failed { border-color: #da3633; }
+.agent-card.pending { border-color: #30363d; opacity: 0.6; }
+.agent-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.agent-name { font-weight: 600; font-size: 0.95rem; }
+.agent-role { font-size: 0.8rem; color: #8b949e; }
+.agent-state { font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+.state-running { background: #1f6feb33; color: #58a6ff; }
+.state-completed { background: #23863633; color: #3fb950; }
+.state-failed { background: #da363333; color: #f85149; }
+.state-pending { background: #30363d; color: #8b949e; }
+.agent-output { font-size: 0.8rem; color: #8b949e; max-height: 120px; overflow-y: auto; white-space: pre-wrap; border-top: 1px solid #30363d; margin-top: 8px; padding-top: 8px; }
+.agent-retry { font-size: 0.7rem; color: #d29922; margin-top: 4px; }
+.result-section { background: #161b22; border-radius: 8px; padding: 16px; margin-top: 20px; display: none; }
+.result-section.show { display: block; }
+.summary { white-space: pre-wrap; font-size: 0.85rem; line-height: 1.5; max-height: 600px; overflow-y: auto; }
+.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #30363d; border-top: 2px solid #58a6ff; border-radius: 50%; animation: spin 1s linear infinite; margin-left: 8px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<h1>AgentSwarm Dashboard</h1>
+
+<form id="taskForm">
+    <input type="text" id="query" placeholder="Enter your task..." value="调研2025年国产AI芯片市场并生成分析报告">
+    <button type="submit" id="submitBtn">Run</button>
+</form>
+
+<div id="status">Ready</div>
+
+<div class="dag-container" id="dagContainer">
+    <div class="mermaid" id="dagChart"></div>
+</div>
+
+<div class="agent-list" id="agentList"></div>
+
+<div class="result-section" id="resultSection">
+    <h2 style="font-size:1.1rem; margin-bottom:10px; color:#3fb950;">Results</h2>
+    <div class="summary" id="summary"></div>
+</div>
+
+<script>
+mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+
+let eventSource = null;
+let subtasks = [];
+let agentStates = {};
+let dagGroups = [];
+
+document.getElementById('taskForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const query = document.getElementById('query').value.trim();
+    if (!query) return;
+
+    document.getElementById('submitBtn').disabled = true;
+    document.getElementById('status').innerHTML = 'Starting...<span class="spinner"></span>';
+    document.getElementById('dagContainer').classList.remove('show');
+    document.getElementById('resultSection').classList.remove('show');
+    document.getElementById('agentList').innerHTML = '';
+    agentStates = {};
+
+    const resp = await fetch(`/run?query=${encodeURIComponent(query)}`, { method: 'POST' });
+    const { task_id } = await resp.json();
+
+    if (eventSource) eventSource.close();
+    eventSource = new EventSource(`/stream/${task_id}`);
+
+    eventSource.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        handleEvent(data);
+    };
+    eventSource.onerror = () => document.getElementById('status').innerHTML = 'Connection lost.';
+});
+
+function handleEvent(data) {
+    switch (data.type) {
+        case 'status':
+            document.getElementById('status').innerHTML = data.msg + '<span class="spinner"></span>';
+            break;
+
+        case 'dag':
+            subtasks = data.subtasks;
+            dagGroups = data.parallel_groups;
+            renderDAG(data);
+            renderAgents(data.subtasks, data.parallel_groups);
+            break;
+
+        case 'agent_start':
+            agentStates[data.subtask_id] = { state: 'running' };
+            updateAgentCard(data.subtask_id);
+            break;
+
+        case 'agent_done':
+            agentStates[data.subtask_id] = {
+                state: data.state,
+                output: data.output,
+                error: data.error,
+                retry: data.retry_count,
+            };
+            updateAgentCard(data.subtask_id);
+            break;
+
+        case 'done':
+            document.getElementById('status').innerHTML = 'Complete';
+            document.getElementById('resultSection').classList.add('show');
+            document.getElementById('summary').textContent = data.summary;
+            document.getElementById('submitBtn').disabled = false;
+            if (eventSource) eventSource.close();
+            break;
+
+        case 'error':
+            document.getElementById('status').innerHTML = '<span style="color:#f85149">Error: ' + data.msg + '</span>';
+            document.getElementById('submitBtn').disabled = false;
+            break;
+    }
+}
+
+function renderDAG(data) {
+    const container = document.getElementById('dagContainer');
+    container.classList.add('show');
+
+    let mermaid = 'graph LR\n';
+    const groupColors = ['#58a6ff', '#3fb950', '#d29922', '#f85149'];
+
+    for (let gi = 0; gi < data.parallel_groups.length; gi++) {
+        const group = data.parallel_groups[gi];
+        mermaid += `  subgraph g${gi}["Group ${gi+1}"]\n`;
+        mermaid += `    style g${gi} fill:#161b22,stroke:${groupColors[gi%4]}\n`;
+        for (const tid of group) {
+            const s = data.subtasks.find(x => x.id === tid);
+            const label = s ? s.name.replace(/_/g, ' ') : tid;
+            mermaid += `    ${tid}["${label}"]\n`;
+        }
+        mermaid += `  end\n`;
+    }
+
+    for (const s of data.subtasks) {
+        for (const dep of s.depends_on) {
+            mermaid += `  ${dep} --> ${s.id}\n`;
+        }
+    }
+
+    document.getElementById('dagChart').textContent = mermaid;
+    mermaid.run({ nodes: [document.getElementById('dagChart')] });
+}
+
+function renderAgents(subtasks, groups) {
+    const container = document.getElementById('agentList');
+    container.innerHTML = '';
+
+    for (const s of subtasks) {
+        const groupIdx = groups.findIndex(g => g.includes(s.id));
+        const card = document.createElement('div');
+        card.className = 'agent-card pending';
+        card.id = `agent-${s.id}`;
+        card.innerHTML = `
+            <div class="agent-header">
+                <div><span class="agent-name">${s.name.replace(/_/g, ' ')}</span> <span class="agent-role">${s.role}</span></div>
+                <div><span class="agent-state state-pending">pending</span></div>
+            </div>
+            <div style="font-size:0.75rem; color:#484f58">Group ${groupIdx+1} · ${s.tools.join(', ')}</div>
+            <div class="agent-output" id="output-${s.id}"></div>
+            <div class="agent-retry" id="retry-${s.id}"></div>
+        `;
+        container.appendChild(card);
+    }
+}
+
+function updateAgentCard(tid) {
+    const card = document.getElementById(`agent-${tid}`);
+    const outputDiv = document.getElementById(`output-${tid}`);
+    const retryDiv = document.getElementById(`retry-${tid}`);
+    if (!card) return;
+
+    const info = agentStates[tid];
+    const stateEl = card.querySelector('.agent-state');
+    const state = info.state;
+
+    card.className = `agent-card ${state}`;
+    stateEl.textContent = state;
+    stateEl.className = `agent-state state-${state}`;
+
+    if (info.output) {
+        outputDiv.textContent = info.output;
+    }
+    if (info.error) {
+        outputDiv.textContent += `\n[ERROR: ${info.error}]`;
+    }
+    if (info.retry) {
+        retryDiv.textContent = `Retries: ${info.retry}`;
+    }
+}
+</script>
+</body>
+</html>
