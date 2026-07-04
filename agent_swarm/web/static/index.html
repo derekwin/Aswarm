@@ -3,215 +3,316 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AgentSwarm Dashboard</title>
+<title>AgentSwarm</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <style>
+:root {
+  --bg: #0f0f0f;
+  --sidebar-bg: #0a0a0a;
+  --card-bg: #1a1a1a;
+  --card-border: #2a2a2a;
+  --text: #e5e5e5;
+  --text-dim: #888;
+  --accent: #4f8fff;
+  --accent-dim: #3a6fd8;
+  --green: #22c55e;
+  --red: #ef4444;
+  --amber: #f59e0b;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; max-width: 1200px; margin: 0 auto; }
-h1 { font-size: 1.5rem; margin-bottom: 16px; color: #58a6ff; }
-form { display: flex; gap: 8px; margin-bottom: 20px; }
-input[type=text] { flex: 1; padding: 10px 14px; font-size: 1rem; background: #161b22; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; }
-button { padding: 10px 20px; font-size: 1rem; background: #238636; border: none; border-radius: 6px; color: white; cursor: pointer; font-weight: 600; }
-button:hover { background: #2ea043; }
-button:disabled { opacity: 0.5; cursor: not-allowed; }
-#status { margin-bottom: 12px; padding: 8px 12px; background: #161b22; border-radius: 6px; font-size: 0.9rem; }
-.dag-container { background: #161b22; border-radius: 8px; padding: 16px; margin-bottom: 20px; display: none; }
-.dag-container.show { display: block; }
-.agent-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-bottom: 20px; }
-.agent-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px; transition: border-color 0.3s; }
-.agent-card.running { border-color: #58a6ff; }
-.agent-card.completed { border-color: #238636; }
-.agent-card.failed { border-color: #da3633; }
-.agent-card.pending { border-color: #30363d; opacity: 0.6; }
-.agent-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.agent-name { font-weight: 600; font-size: 0.95rem; }
-.agent-role { font-size: 0.8rem; color: #8b949e; }
-.agent-state { font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
-.state-running { background: #1f6feb33; color: #58a6ff; }
-.state-completed { background: #23863633; color: #3fb950; }
-.state-failed { background: #da363333; color: #f85149; }
-.state-pending { background: #30363d; color: #8b949e; }
-.agent-output { font-size: 0.8rem; color: #8b949e; max-height: 120px; overflow-y: auto; white-space: pre-wrap; border-top: 1px solid #30363d; margin-top: 8px; padding-top: 8px; }
-.agent-retry { font-size: 0.7rem; color: #d29922; margin-top: 4px; }
-.result-section { background: #161b22; border-radius: 8px; padding: 16px; margin-top: 20px; display: none; }
-.result-section.show { display: block; }
-.summary { white-space: pre-wrap; font-size: 0.85rem; line-height: 1.5; max-height: 600px; overflow-y: auto; }
-.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #30363d; border-top: 2px solid #58a6ff; border-radius: 50%; animation: spin 1s linear infinite; margin-left: 8px; vertical-align: middle; }
-@keyframes spin { to { transform: rotate(360deg); } }
+body { font-family: var(--font); background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; }
+
+.sidebar { width: 260px; background: var(--sidebar-bg); border-right: 1px solid var(--card-border); display: flex; flex-direction: column; flex-shrink: 0; }
+.sidebar-header { padding: 20px 16px; border-bottom: 1px solid var(--card-border); display: flex; align-items: center; gap: 10px; }
+.sidebar-header .logo { width: 28px; height: 28px; background: linear-gradient(135deg, var(--accent), #a78bfa); border-radius: 6px; }
+.sidebar-header h2 { font-size: 1rem; font-weight: 700; }
+.project-list { flex: 1; overflow-y: auto; padding: 8px; }
+.project-item { padding: 10px 12px; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.85rem; color: var(--text-dim); transition: all 0.15s; margin-bottom: 2px; display: flex; align-items: center; gap: 8px; }
+.project-item:hover { background: var(--card-bg); color: var(--text); }
+.project-item.active { background: var(--card-bg); color: var(--text); font-weight: 500; }
+.project-item .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
+.project-item.active .dot { background: var(--accent); }
+.new-project-btn { margin: 8px; padding: 10px; border-radius: var(--radius-sm); border: 1px dashed var(--card-border); background: transparent; color: var(--text-dim); cursor: pointer; font-size: 0.85rem; transition: all 0.15s; }
+.new-project-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.main-header { padding: 14px 24px; border-bottom: 1px solid var(--card-border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.main-header h3 { font-size: 0.95rem; font-weight: 600; }
+.model-badge { font-size: 0.75rem; padding: 4px 10px; background: var(--card-bg); border-radius: 20px; color: var(--text-dim); border: 1px solid var(--card-border); }
+.chat-area { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+
+.message { display: flex; gap: 12px; max-width: 800px; animation: slideIn 0.3s ease; }
+.message.user { align-self: flex-end; flex-direction: row-reverse; }
+.message.assistant { align-self: flex-start; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; }
+.avatar.user { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+.avatar.assistant { background: linear-gradient(135deg, var(--accent), #a78bfa); }
+.bubble { padding: 14px 18px; border-radius: var(--radius); font-size: 0.9rem; line-height: 1.6; }
+.bubble.user { background: var(--accent-dim); color: #fff; border-bottom-right-radius: 4px; }
+.bubble.assistant { background: var(--card-bg); border: 1px solid var(--card-border); border-bottom-left-radius: 4px; }
+
+.agent-block { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius); overflow: hidden; margin-top: 12px; }
+.agent-block-header { padding: 10px 14px; background: rgba(79,143,255,0.05); border-bottom: 1px solid var(--card-border); display: flex; align-items: center; justify-content: space-between; cursor: pointer; font-size: 0.8rem; font-weight: 600; }
+.agent-block-header:hover { background: rgba(79,143,255,0.1); }
+.dag-mini { padding: 12px 14px; border-bottom: 1px solid var(--card-border); background: #0d0d0d; }
+.agent-grid { display: grid; grid-template-columns: 1fr; gap: 1px; background: var(--card-border); }
+.agent-row { display: grid; grid-template-columns: 1fr 80px 140px; gap: 1px; background: var(--card-border); font-size: 0.78rem; }
+.agent-row > div { background: var(--bg); padding: 8px 12px; display: flex; align-items: center; }
+.agent-row .name { font-weight: 500; }
+.agent-row .state { justify-content: center; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.agent-row .state.running { color: var(--accent); }
+.agent-row .state.completed { color: var(--green); }
+.agent-row .state.failed { color: var(--red); }
+.agent-row .state.pending { color: var(--text-dim); }
+.agent-row .tools { color: var(--text-dim); font-size: 0.7rem; }
+.agent-output-inline { padding: 10px 14px; font-size: 0.75rem; color: var(--text-dim); max-height: 180px; overflow-y: auto; white-space: pre-wrap; border-top: 1px solid var(--card-border); display: none; }
+.agent-output-inline.show { display: block; }
+
+.input-area { padding: 16px 24px; border-top: 1px solid var(--card-border); flex-shrink: 0; }
+.input-wrapper { display: flex; gap: 8px; max-width: 800px; margin: 0 auto; }
+.input-wrapper textarea { flex: 1; padding: 12px 16px; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius); color: var(--text); font-family: var(--font); font-size: 0.9rem; resize: none; min-height: 44px; max-height: 120px; line-height: 1.5; }
+.input-wrapper textarea:focus { outline: none; border-color: var(--accent); }
+.input-wrapper button { padding: 0 20px; background: var(--accent); border: none; border-radius: var(--radius); color: white; font-weight: 600; cursor: pointer; font-size: 0.85rem; transition: background 0.15s; flex-shrink: 0; }
+.input-wrapper button:hover { background: var(--accent-dim); }
+.input-wrapper button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+@keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.pulse { animation: pulse 1.5s infinite; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 4px; }
+
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .agent-row { grid-template-columns: 1fr 60px; }
+  .agent-row .tools { display: none; }
+}
 </style>
 </head>
 <body>
 
-<h1>AgentSwarm Dashboard</h1>
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <div class="logo"></div>
+    <h2>AgentSwarm</h2>
+  </div>
+  <div class="project-list" id="projectList">
+    <div class="project-item active" data-id="default">
+      <div class="dot"></div> Research Demo
+    </div>
+  </div>
+  <button class="new-project-btn" onclick="newProject()">+ New Project</button>
+</aside>
 
-<form id="taskForm">
-    <input type="text" id="query" placeholder="Enter your task..." value="调研2025年国产AI芯片市场并生成分析报告">
-    <button type="submit" id="submitBtn">Run</button>
-</form>
+<main class="main">
+  <header class="main-header">
+    <h3 id="projectTitle">Research Demo</h3>
+    <span class="model-badge">qwen3.5:35b</span>
+  </header>
 
-<div id="status">Ready</div>
+  <div class="chat-area" id="chatArea">
+    <div class="message assistant" style="align-self:center; opacity:0.5; font-size:0.85rem; color:var(--text-dim); margin-top:60px;">
+      Enter a task to start the agent swarm
+    </div>
+  </div>
 
-<div class="dag-container" id="dagContainer">
-    <div class="mermaid" id="dagChart"></div>
-</div>
-
-<div class="agent-list" id="agentList"></div>
-
-<div class="result-section" id="resultSection">
-    <h2 style="font-size:1.1rem; margin-bottom:10px; color:#3fb950;">Results</h2>
-    <div class="summary" id="summary"></div>
-</div>
+  <div class="input-area">
+    <div class="input-wrapper">
+      <textarea id="queryInput" placeholder="Describe your task..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitTask()}"></textarea>
+      <button id="submitBtn" onclick="submitTask()">Send</button>
+    </div>
+  </div>
+</main>
 
 <script>
 mermaid.initialize({ startOnLoad: true, theme: 'dark' });
 
 let eventSource = null;
-let subtasks = [];
 let agentStates = {};
-let dagGroups = [];
 
-document.getElementById('taskForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const query = document.getElementById('query').value.trim();
-    if (!query) return;
+function submitTask() {
+  const query = document.getElementById('queryInput').value.trim();
+  if (!query) return;
 
-    document.getElementById('submitBtn').disabled = true;
-    document.getElementById('status').innerHTML = 'Starting...<span class="spinner"></span>';
-    document.getElementById('dagContainer').classList.remove('show');
-    document.getElementById('resultSection').classList.remove('show');
-    document.getElementById('agentList').innerHTML = '';
-    agentStates = {};
+  document.getElementById('submitBtn').disabled = true;
+  document.getElementById('queryInput').value = '';
 
-    const resp = await fetch(`/run?query=${encodeURIComponent(query)}`, { method: 'POST' });
-    const { task_id } = await resp.json();
+  const chat = document.getElementById('chatArea');
 
-    if (eventSource) eventSource.close();
-    eventSource = new EventSource(`/stream/${task_id}`);
+  const userMsg = document.createElement('div');
+  userMsg.className = 'message user';
+  userMsg.innerHTML = `<div class="bubble user">${escapeHtml(query)}</div><div class="avatar user">U</div>`;
+  chat.appendChild(userMsg);
 
-    eventSource.onmessage = (e) => {
-        const data = JSON.parse(e.data);
-        handleEvent(data);
-    };
-    eventSource.onerror = () => document.getElementById('status').innerHTML = 'Connection lost.';
-});
+  const asstMsg = document.createElement('div');
+  asstMsg.className = 'message assistant';
+  asstMsg.id = `msg-${Date.now()}`;
+  asstMsg.innerHTML = `
+    <div class="avatar assistant">S</div>
+    <div style="flex:1">
+      <div class="bubble assistant pulse" id="statusBubble">Planning task decomposition...</div>
+      <div id="agentContainer"></div>
+    </div>`;
+  chat.appendChild(asstMsg);
+  chat.scrollTop = chat.scrollHeight;
 
-function handleEvent(data) {
-    switch (data.type) {
-        case 'status':
-            document.getElementById('status').innerHTML = data.msg + '<span class="spinner"></span>';
-            break;
+  const statusBubble = asstMsg.querySelector('#statusBubble');
+  const agentContainer = asstMsg.querySelector('#agentContainer');
 
-        case 'dag':
-            subtasks = data.subtasks;
-            dagGroups = data.parallel_groups;
-            renderDAG(data);
-            renderAgents(data.subtasks, data.parallel_groups);
-            break;
-
-        case 'agent_start':
-            agentStates[data.subtask_id] = { state: 'running' };
-            updateAgentCard(data.subtask_id);
-            break;
-
-        case 'agent_done':
-            agentStates[data.subtask_id] = {
-                state: data.state,
-                output: data.output,
-                error: data.error,
-                retry: data.retry_count,
-            };
-            updateAgentCard(data.subtask_id);
-            break;
-
-        case 'done':
-            document.getElementById('status').innerHTML = 'Complete';
-            document.getElementById('resultSection').classList.add('show');
-            document.getElementById('summary').textContent = data.summary;
-            document.getElementById('submitBtn').disabled = false;
-            if (eventSource) eventSource.close();
-            break;
-
-        case 'error':
-            document.getElementById('status').innerHTML = '<span style="color:#f85149">Error: ' + data.msg + '</span>';
-            document.getElementById('submitBtn').disabled = false;
-            break;
-    }
+  fetch(`/run?query=${encodeURIComponent(query)}`, { method: 'POST' })
+    .then(r => r.json())
+    .then(({ task_id }) => {
+      if (eventSource) eventSource.close();
+      eventSource = new EventSource(`/stream/${task_id}`);
+      eventSource.onmessage = (e) => handleEvent(JSON.parse(e.data), statusBubble, agentContainer);
+      eventSource.onerror = () => {
+        statusBubble.className = 'bubble assistant';
+        statusBubble.textContent = 'Connection lost.';
+        document.getElementById('submitBtn').disabled = false;
+      };
+    });
 }
 
-function renderDAG(data) {
-    const container = document.getElementById('dagContainer');
-    container.classList.add('show');
+function handleEvent(data, statusBubble, container) {
+  const chat = document.getElementById('chatArea');
+  switch (data.type) {
+    case 'status':
+      statusBubble.className = 'bubble assistant pulse';
+      statusBubble.textContent = data.msg;
+      break;
 
-    let mermaid = 'graph LR\n';
-    const groupColors = ['#58a6ff', '#3fb950', '#d29922', '#f85149'];
+    case 'dag':
+      statusBubble.className = 'bubble assistant';
+      statusBubble.innerHTML = `Decomposed into <strong>${data.subtasks.length} agents</strong> across <strong>${data.parallel_groups.length} groups</strong>. Intent: ${data.intent}.`;
+      renderAgentBlock(container, data);
+      break;
 
-    for (let gi = 0; gi < data.parallel_groups.length; gi++) {
-        const group = data.parallel_groups[gi];
-        mermaid += `  subgraph g${gi}["Group ${gi+1}"]\n`;
-        mermaid += `    style g${gi} fill:#161b22,stroke:${groupColors[gi%4]}\n`;
-        for (const tid of group) {
-            const s = data.subtasks.find(x => x.id === tid);
-            const label = s ? s.name.replace(/_/g, ' ') : tid;
-            mermaid += `    ${tid}["${label}"]\n`;
-        }
-        mermaid += `  end\n`;
-    }
+    case 'agent_start':
+      agentStates[data.subtask_id] = { state: 'running' };
+      refreshRows();
+      break;
 
-    for (const s of data.subtasks) {
-        for (const dep of s.depends_on) {
-            mermaid += `  ${dep} --> ${s.id}\n`;
-        }
-    }
+    case 'agent_done':
+      agentStates[data.subtask_id] = {
+        state: data.state, output: data.output, error: data.error, retry: data.retry_count,
+      };
+      refreshRows();
+      break;
 
-    document.getElementById('dagChart').textContent = mermaid;
-    mermaid.run({ nodes: [document.getElementById('dagChart')] });
+    case 'done':
+      statusBubble.className = 'bubble assistant';
+      statusBubble.innerHTML = `<strong>Task complete.</strong><br><br>${escapeHtml(data.summary).replace(/\n/g, '<br>')}`;
+      document.getElementById('submitBtn').disabled = false;
+      if (eventSource) eventSource.close();
+      break;
+
+    case 'error':
+      statusBubble.className = 'bubble assistant';
+      statusBubble.innerHTML = `<span style="color:#ef4444">${escapeHtml(data.msg)}</span>`;
+      document.getElementById('submitBtn').disabled = false;
+      break;
+  }
+  chat.scrollTop = chat.scrollHeight;
 }
 
-function renderAgents(subtasks, groups) {
-    const container = document.getElementById('agentList');
-    container.innerHTML = '';
+function renderAgentBlock(container, data) {
+  container.innerHTML = '';
+  const block = document.createElement('div');
+  block.className = 'agent-block';
 
-    for (const s of subtasks) {
-        const groupIdx = groups.findIndex(g => g.includes(s.id));
-        const card = document.createElement('div');
-        card.className = 'agent-card pending';
-        card.id = `agent-${s.id}`;
-        card.innerHTML = `
-            <div class="agent-header">
-                <div><span class="agent-name">${s.name.replace(/_/g, ' ')}</span> <span class="agent-role">${s.role}</span></div>
-                <div><span class="agent-state state-pending">pending</span></div>
-            </div>
-            <div style="font-size:0.75rem; color:#484f58">Group ${groupIdx+1} · ${s.tools.join(', ')}</div>
-            <div class="agent-output" id="output-${s.id}"></div>
-            <div class="agent-retry" id="retry-${s.id}"></div>
-        `;
-        container.appendChild(card);
+  const header = document.createElement('div');
+  header.className = 'agent-block-header';
+  header.innerHTML = `<span>${data.subtasks.length} Agents · ${data.parallel_groups.length} Groups</span>`;
+  block.appendChild(header);
+
+  const dagDiv = document.createElement('div');
+  dagDiv.className = 'dag-mini';
+  let mm = 'graph LR\n';
+  for (let gi = 0; gi < data.parallel_groups.length; gi++) {
+    mm += `  subgraph G${gi+1}[Group ${gi+1}]\n`;
+    mm += `    style G${gi+1} fill:#0d0d0d,stroke:#2a2a2a\n`;
+    for (const tid of data.parallel_groups[gi]) {
+      const s = data.subtasks.find(x => x.id === tid) || {};
+      mm += `    ${tid}["${(s.name||tid).slice(0,25)}"]\n`;
     }
+    mm += `  end\n`;
+  }
+  for (const s of data.subtasks) {
+    for (const dep of s.depends_on) mm += `  ${dep} --> ${s.id}\n`;
+  }
+  dagDiv.innerHTML = `<div class="mermaid">${mm}</div>`;
+  block.appendChild(dagDiv);
+
+  const grid = document.createElement('div');
+  grid.className = 'agent-grid';
+  grid.id = 'agentGrid';
+  grid.innerHTML = '<div class="agent-row" style="color:var(--text-dim);font-size:0.7rem;text-transform:uppercase"><div>Agent</div><div>State</div><div>Tools</div></div>';
+  for (const s of data.subtasks) {
+    const gIdx = data.parallel_groups.findIndex(g => g.includes(s.id));
+    const row = document.createElement('div');
+    row.className = 'agent-row';
+    row.id = `row-${s.id}`;
+    row.innerHTML = `
+      <div class="name">${s.name.replace(/_/g,' ')} <span style="color:var(--text-dim);font-size:0.65rem">G${gIdx+1}</span></div>
+      <div class="state pending" id="state-${s.id}">pending</div>
+      <div class="tools">${s.tools.join(', ')}</div>`;
+    row.addEventListener('click', () => toggleOutput(s.id));
+    grid.appendChild(row);
+  }
+  block.appendChild(grid);
+  container.appendChild(block);
 }
 
-function updateAgentCard(tid) {
-    const card = document.getElementById(`agent-${tid}`);
-    const outputDiv = document.getElementById(`output-${tid}`);
-    const retryDiv = document.getElementById(`retry-${tid}`);
-    if (!card) return;
-
-    const info = agentStates[tid];
-    const stateEl = card.querySelector('.agent-state');
-    const state = info.state;
-
-    card.className = `agent-card ${state}`;
-    stateEl.textContent = state;
-    stateEl.className = `agent-state state-${state}`;
-
-    if (info.output) {
-        outputDiv.textContent = info.output;
+function refreshRows() {
+  for (const [tid, info] of Object.entries(agentStates)) {
+    const el = document.getElementById(`state-${tid}`);
+    if (!el) continue;
+    el.textContent = info.state;
+    el.className = `state ${info.state}`;
+    if (info.state === 'completed' || info.state === 'failed') {
+      document.getElementById(`row-${tid}`).style.cursor = 'pointer';
     }
-    if (info.error) {
-        outputDiv.textContent += `\n[ERROR: ${info.error}]`;
-    }
-    if (info.retry) {
-        retryDiv.textContent = `Retries: ${info.retry}`;
-    }
+  }
+}
+
+const outputDivs = {};
+function toggleOutput(tid) {
+  const info = agentStates[tid];
+  if (!info || (!info.output && !info.error)) return;
+  let el = outputDivs[tid];
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'agent-output-inline show';
+    el.id = `out-${tid}`;
+    document.getElementById(`row-${tid}`).after(el);
+    outputDivs[tid] = el;
+  }
+  el.textContent = (info.output||'') + (info.error ? `\n[${info.error}]` : '') + (info.retry ? `\nRetries: ${info.retry}` : '');
+  el.classList.toggle('show');
+}
+
+function newProject() {
+  const name = prompt('Project name:') || 'New Project';
+  const el = document.createElement('div');
+  el.className = 'project-item';
+  el.innerHTML = '<div class="dot"></div>' + name;
+  el.onclick = () => {
+    document.querySelectorAll('.project-item').forEach(x => x.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('projectTitle').textContent = name;
+  };
+  document.getElementById('projectList').appendChild(el);
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 </script>
 </body>
