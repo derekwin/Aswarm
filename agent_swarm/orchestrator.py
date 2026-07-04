@@ -25,9 +25,9 @@ JUDGE_SYSTEM_PROMPT = """You are a quality evaluator. Judge whether an Agent's o
 Respond in English only.
 
 Evaluation criteria:
-- Information density: does the output contain substantive content (not filler, not "no data found", not "insufficient information")
-- Tool usage: did the agent actually call tools and use the returned results
-- Task completion: does the output address the task requirements
+- Information density: does the output contain substantive content (specific data, facts, names, numbers) — not vague descriptions or "no data found"
+- Task completion: does the output address the task requirements with concrete information
+- Action evidence: does the output show the agent took real action (searched, coded, analyzed) — summaries and analysis ARE valid output formats. Do NOT penalize for lacking explicit source citations or search queries in the output text.
 
 Return JSON: {"pass": true/false, "reason": "one sentence explaining why"}"""
 
