@@ -130,7 +130,7 @@ class SwarmOrchestrator:
                 msg = response.choices[0].message
 
                 if msg.tool_calls:
-                    messages = self._handle_tool_calls(agent, msg.tool_calls, messages)
+                    messages = await self._handle_tool_calls(agent, msg.tool_calls, messages)
                 else:
                     final_output = msg.content or ""
                     messages.append({"role": "assistant", "content": final_output})
