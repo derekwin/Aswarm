@@ -41,7 +41,7 @@ async def main():
     )
 
     # ── 执行 ──
-    query = "调研2025年国产AI芯片市场并生成分析报告"
+    query = "调研无问星穹并生成分析报告"
     logger.info(f"Processing: {query}")
 
     # Step 1: Meta-Scheduler 分解任务

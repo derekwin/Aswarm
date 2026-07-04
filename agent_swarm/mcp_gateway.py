@@ -169,6 +169,14 @@ class MCPGateway:
             },
             handler=self._search_handler,
         ))
+        self.register(ToolDefinition(
+            name="webfetch",
+            description="Fetch a web page and extract readable text content. Use after search_engine to read full articles.",
+            parameters={
+                "url": {"type": "string", "description": "The URL of the page to fetch"},
+            },
+            handler=self._webfetch_handler,
+        ))
 
     def register(self, tool: ToolDefinition):
         """注册工具。"""
@@ -290,3 +298,28 @@ class MCPGateway:
     @staticmethod
     def _search_handler(query: str, max_results: int = 10) -> str:
         return _bing_search(query, max_results)
+
+    @staticmethod
+    def _webfetch_handler(url: str) -> str:
+        """抓取网页并提取可读文本（去除 HTML 标签、脚本、样式）。"""
+        import urllib.request
+        import re
+        try:
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            })
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                html = resp.read().decode("utf-8", errors="replace")
+
+            # 去除 script, style, nav, footer, header 等非内容标签
+            for tag in ("script", "style", "nav", "footer", "header", "noscript"):
+                html = re.sub(rf"<{tag}[^>]*>.*?</{tag}>", "", html, flags=re.DOTALL | re.IGNORECASE)
+
+            # 去除所有 HTML 标签，保留文本
+            text = re.sub(r"<[^>]+>", " ", html)
+            # 合并空白
+            text = re.sub(r"\s+", " ", text).strip()
+            # 截取合理长度
+            return text[:8000] if len(text) > 8000 else text
+        except Exception as e:
+            return f"Error fetching {url}: {e}"

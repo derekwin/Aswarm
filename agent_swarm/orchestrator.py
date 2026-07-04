@@ -246,9 +246,12 @@ class SwarmOrchestrator:
                 logger.warning(f"Tool '{tool_name}' not found, skipping")
         return tools
 
-    @staticmethod
-    def _build_messages(agent: Agent, prompt: str, context: str) -> list[dict]:
-        messages = [{"role": "system", "content": agent.system_prompt}]
+    def _build_messages(self, agent: Agent, prompt: str, context: str) -> list[dict]:
+        # 注入工具能力说明和沙箱信息
+        capabilities = self._build_capabilities_block(agent.tool_names())
+        full_system = agent.system_prompt + capabilities
+
+        messages = [{"role": "system", "content": full_system}]
         if context:
             messages.append({
                 "role": "system",
@@ -256,6 +259,40 @@ class SwarmOrchestrator:
             })
         messages.append({"role": "user", "content": prompt})
         return messages
+
+    def _build_capabilities_block(self, tool_names: list[str]) -> str:
+        """构建工具能力注入块（类似 Claude Code 的工具清单）。"""
+        parts = ["\n\n---", "## 可用工具与沙箱环境", ""]
+        
+        for name in tool_names:
+            try:
+                schema = self.gateway.get_schema(name)
+                parts.append(f"- **{name}**: {schema['description']}")
+            except KeyError:
+                pass
+        
+        if "python_executor" in tool_names:
+            parts.extend([
+                "",
+                "## Python 沙箱可用库",
+                "numpy, pandas, matplotlib, requests, json, csv, os, re, math,",
+                "datetime, collections, itertools, pathlib, io, textwrap, hashlib",
+                "",
+                "**重要**: matplotlib 可以生成图表，使用 `plt.savefig()` 保存图片文件。",
+                "数据分析和计算任务必须用 python_executor 执行，不要「推断」或「假设」结果。",
+            ])
+        
+        if "search_engine" in tool_names:
+            parts.extend([
+                "",
+                "## 搜索与信息获取策略",
+                "1. 先用 search_engine 搜索关键词，获取 URL 列表",
+                "2. 对有价值的页面用 webfetch 获取全文阅读",
+                "3. 如果搜索结果不满意，换角度/换关键词重新搜索，不要轻易放弃",
+                "4. 至少尝试 2-3 轮搜索后才下结论",
+            ])
+        
+        return "\n".join(parts)
 
     @staticmethod
     def _find_subtask(dag: TaskDAG, subtask_id: str):
