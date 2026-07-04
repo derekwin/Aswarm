@@ -2,9 +2,17 @@
 
 import asyncio
 import subprocess
-from html.parser import HTMLParser
 from typing import Any, Callable
 from dataclasses import dataclass
+import requests
+from bs4 import BeautifulSoup
+
+SESSION = requests.Session()
+SESSION.headers.update({
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+})
 
 
 @dataclass
@@ -17,164 +25,110 @@ class ToolDefinition:
 
 
 def _search_multi_engine(query: str, max_results: int) -> str:
-    """Multi-engine search: try Bing first, fall back to Sogou."""
-    import urllib.request
-    import urllib.parse
-
     engines = [
-        ("Bing", lambda q: f"https://cn.bing.com/search?q={urllib.parse.quote(q)}&count={min(max_results, 15)}"),
-        ("Sogou", lambda q: f"https://www.sogou.com/web?query={urllib.parse.quote(q)}"),
+        ("Bing", _search_bing),
+        ("Sogou", _search_sogou),
     ]
 
     all_results = []
     errors = []
 
-    for engine_name, url_builder in engines:
+    for name, search_fn in engines:
         try:
-            url = url_builder(query)
-            req = urllib.request.Request(url, headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            })
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                html = resp.read().decode("utf-8", errors="replace")
-
-            if engine_name == "Bing":
-                results = _parse_bing_results(html, max_results)
-            else:
-                results = _parse_sogou_results(html, max_results)
-
+            results, error = search_fn(query, max_results)
             if results:
-                all_results.extend(results)
-                break  # got results, stop trying other engines
-            else:
-                errors.append(f"{engine_name}: no results parsed")
+                all_results = results
+                break
+            if error:
+                errors.append(f"{name}: {error}")
         except Exception as e:
-            errors.append(f"{engine_name}: {e}")
+            errors.append(f"{name}: {e}")
 
     if not all_results:
         return f"No results found for '{query}' ({'; '.join(errors)})"
 
     lines = []
-    for i, (title, href, snippet) in enumerate(all_results[:max_results]):
+    for i, (title, href, snippet) in enumerate(all_results):
         lines.append(f"{i + 1}. {title}\n   {href}\n   {snippet}")
 
     return "\n\n".join(lines)
 
 
-# ─── Bing Parser ───
-
-class _BingResultParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.results = []
-        self._in_h2 = False
-        self._in_p = False
-        self._current_title = ""
-        self._current_href = ""
-        self._current_snippet = ""
-        self._capture_title = False
-        self._capture_snippet = False
-
-    def handle_starttag(self, tag, attrs):
-        attrs_dict = dict(attrs)
-        if tag == "h2":
-            self._in_h2 = True
-            self._current_title = ""
-            self._current_href = ""
-            self._capture_title = True
-        elif tag == "a" and self._in_h2 and "href" in attrs_dict:
-            self._current_href = attrs_dict["href"]
-        elif tag == "p" and not self._in_h2:
-            self._in_p = True
-            self._current_snippet = ""
-            self._capture_snippet = True
-
-    def handle_endtag(self, tag):
-        if tag == "h2":
-            self._in_h2 = False
-            if self._current_title and self._current_href:
-                self.results.append((
-                    self._current_title.strip(),
-                    self._current_href,
-                    self._current_snippet.strip(),
-                ))
-            self._capture_title = False
-        elif tag == "p":
-            self._in_p = False
-            self._capture_snippet = False
-
-    def handle_data(self, data):
-        if self._capture_title:
-            self._current_title += data
-        elif self._capture_snippet:
-            self._current_snippet += data
-
-
-def _parse_bing_results(html: str, max_results: int) -> list[tuple[str, str, str]]:
-    parser = _BingResultParser()
+def _search_bing(query: str, max_results: int) -> tuple[list[tuple[str, str, str]], str]:
     try:
-        parser.feed(html)
-    except Exception:
-        pass
-    return parser.results[:max_results]
+        resp = SESSION.get(
+            "https://cn.bing.com/search",
+            params={"q": query, "setlang": "zh-CN", "count": min(max_results, 15)},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        return _parse_bing_soup(soup, max_results), ""
+    except Exception as e:
+        return [], str(e)
 
 
-# ─── Sogou Parser ───
-
-class _SogouResultParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.results = []
-        self._in_result = False
-        self._in_title = False
-        self._in_snippet = False
-        self._current_title = ""
-        self._current_href = ""
-        self._current_snippet = ""
-
-    def handle_starttag(self, tag, attrs):
-        attrs_dict = dict(attrs)
-        cls = attrs_dict.get("class", "")
-        if tag == "div" and "rb" in cls:
-            self._in_result = True
-            self._current_title = ""
-            self._current_href = ""
-            self._current_snippet = ""
-        elif tag == "h3" and self._in_result:
-            self._in_title = True
-        elif tag == "a" and self._in_title and "href" in attrs_dict:
-            self._current_href = attrs_dict["href"]
-        elif tag == "p" and self._in_result and "str" in cls:
-            self._in_snippet = True
-
-    def handle_endtag(self, tag):
-        if tag == "div" and self._in_result:
-            self._in_result = False
-            if self._current_title and self._current_href:
-                self.results.append((
-                    self._current_title.strip(),
-                    self._current_href,
-                    self._current_snippet.strip(),
-                ))
-        elif tag == "h3":
-            self._in_title = False
-        elif tag == "p":
-            self._in_snippet = False
-
-    def handle_data(self, data):
-        if self._in_title:
-            self._current_title += data
-        elif self._in_snippet:
-            self._current_snippet += data
-
-
-def _parse_sogou_results(html: str, max_results: int) -> list[tuple[str, str, str]]:
-    parser = _SogouResultParser()
+def _search_sogou(query: str, max_results: int) -> tuple[list[tuple[str, str, str]], str]:
     try:
-        parser.feed(html)
-    except Exception:
-        pass
-    return parser.results[:max_results]
+        resp = SESSION.get(
+            "https://www.sogou.com/web",
+            params={"query": query, "ie": "utf8"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        return _parse_sogou_soup(soup, max_results), ""
+    except Exception as e:
+        return [], str(e)
+
+
+def _parse_bing_soup(soup: BeautifulSoup, max_results: int) -> list[tuple[str, str, str]]:
+    results = []
+    for li in soup.select("#b_results > li.b_algo, #b_results > li.b_ans, .b_algo"):
+        if len(results) >= max_results:
+            break
+        title_el = li.select_one("h2 a, .b_title a")
+        if not title_el:
+            continue
+        title = title_el.get_text(strip=True)
+        href = _clean_bing_url(title_el.get("href", ""))
+        if not href:
+            continue
+        snippet_el = li.select_one(".b_caption p, .b_lineclamp2, .b_lineclamp3")
+        snippet = snippet_el.get_text(strip=True) if snippet_el else ""
+        results.append((title, href, snippet))
+    return results
+
+
+def _clean_bing_url(raw: str) -> str:
+    from urllib.parse import urlparse, parse_qs, urlunparse
+    if not raw or not raw.startswith("http"):
+        return ""
+    parsed = urlparse(raw)
+    if "bing.com" in parsed.netloc.lower():
+        qs = parse_qs(parsed.query)
+        target = qs.get("u", [""])[0]
+        if target and target.startswith("http"):
+            return target
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
+
+
+def _parse_sogou_soup(soup: BeautifulSoup, max_results: int) -> list[tuple[str, str, str]]:
+    results = []
+    for card in soup.select("#main .vrwrap, #main .rb, .results .vrwrap, .results .rb"):
+        if len(results) >= max_results:
+            break
+        title_el = card.select_one("h3 a[href], h2 a[href], .vr-title a[href], .pt a[href]")
+        if not title_el:
+            continue
+        title = title_el.get_text(strip=True)
+        href = title_el.get("href", "")
+        if href.startswith("/"):
+            href = f"https://www.sogou.com{href}"
+        snippet_el = card.select_one(".str_info, .ft, .text-layout, .fz-mid, p")
+        snippet = snippet_el.get_text(strip=True) if snippet_el else ""
+        results.append((title, href, snippet))
+    return results
 
 
 class MCPGateway:
@@ -376,25 +330,26 @@ class MCPGateway:
 
     @staticmethod
     def _webfetch_handler(url: str) -> str:
-        """抓取网页并提取可读文本（去除 HTML 标签、脚本、样式）。"""
-        import urllib.request
-        import re
         try:
-            req = urllib.request.Request(url, headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            })
-            with urllib.request.urlopen(req, timeout=20) as resp:
-                html = resp.read().decode("utf-8", errors="replace")
+            resp = SESSION.get(url, timeout=20)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, "html.parser")
 
-            # 去除 script, style, nav, footer, header 等非内容标签
-            for tag in ("script", "style", "nav", "footer", "header", "noscript"):
-                html = re.sub(rf"<{tag}[^>]*>.*?</{tag}>", "", html, flags=re.DOTALL | re.IGNORECASE)
+            for tag in soup(["script", "style", "nav", "footer", "header", "noscript"]):
+                tag.decompose()
 
-            # 去除所有 HTML 标签，保留文本
-            text = re.sub(r"<[^>]+>", " ", html)
-            # 合并空白
-            text = re.sub(r"\s+", " ", text).strip()
-            # 截取合理长度
+            # Priority: article > main > body text
+            content_el = (
+                soup.select_one("article") or
+                soup.select_one('[role="main"]') or
+                soup.select_one("main") or
+                soup.select_one(".markdown-body, .article-content, .post-content, .content") or
+                soup.body
+            )
+            text = content_el.get_text(separator="\n", strip=True) if content_el else soup.get_text(separator="\n", strip=True)
+
+            import re
+            text = re.sub(r"\n{3,}", "\n\n", text).strip()
             return text[:8000] if len(text) > 8000 else text
         except Exception as e:
             return f"Error fetching {url}: {e}"
