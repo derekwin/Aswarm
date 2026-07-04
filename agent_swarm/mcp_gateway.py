@@ -34,6 +34,7 @@ class ToolDefinition:
 def _search_multi_engine(query: str, max_results: int) -> str:
     engines = [
         ("Bing", _search_bing),
+        ("Baidu", _search_baidu),
         ("Sogou", _search_sogou),
     ]
 
@@ -144,6 +145,41 @@ def _parse_sogou_soup(soup: BeautifulSoup, max_results: int) -> list[tuple[str, 
     return results
 
 
+def _search_baidu(query: str, max_results: int) -> tuple[list[tuple[str, str, str]], str]:
+    try:
+        resp = SESSION.get(
+            "https://www.baidu.com/s",
+            params={"wd": query, "rn": min(max_results, 15)},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        results = _parse_baidu_soup(soup, max_results)
+        logger.debug(f"Baidu search '{query[:50]}' → {len(results)} results")
+        return results, ""
+    except Exception as e:
+        logger.warning(f"Baidu search failed for '{query[:50]}': {e}")
+        return [], str(e)
+
+
+def _parse_baidu_soup(soup: BeautifulSoup, max_results: int) -> list[tuple[str, str, str]]:
+    results = []
+    for card in soup.select(".result, .c-container"):
+        if len(results) >= max_results:
+            break
+        title_el = card.select_one("h3 a, .t a")
+        if not title_el:
+            continue
+        title = title_el.get_text(strip=True)
+        href = title_el.get("href", "")
+        if not href.startswith("http"):
+            continue
+        snippet_el = card.select_one(".c-abstract, .content-right_8Zs40, .c-span-last p")
+        snippet = snippet_el.get_text(strip=True) if snippet_el else ""
+        results.append((title, href, snippet))
+    return results
+
+
 def _try_sandbox_run(cmd: list[str], timeout: int = 60) -> tuple[str, str, bool]:
     try:
         from sandlock import Sandbox
@@ -237,7 +273,7 @@ class MCPGateway:
         ))
         self.register(ToolDefinition(
             name="search_engine",
-            description="Search the web using multi-engine fallback (Bing → Sogou). Returns titles, URLs, and snippets.",
+            description="Search the web using multi-engine fallback (Bing → Baidu → Sogou). Returns titles, URLs, and snippets.",
             parameters={
                 "query": {"type": "string", "description": "Search query"},
                 "max_results": {"type": "integer", "description": "Max results (default: 10)"},
