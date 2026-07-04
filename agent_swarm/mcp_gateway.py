@@ -15,6 +15,59 @@ class ToolDefinition:
     handler: Callable[..., Any]
 
 
+def _bing_api_search(query: str, max_results: int, api_key: str) -> str:
+    """通过 Bing Web Search API v7 搜索。需要 BING_API_KEY 环境变量。"""
+    import requests
+    try:
+        resp = requests.get(
+            "https://api.bing.microsoft.com/v7.0/search",
+            headers={"Ocp-Apim-Subscription-Key": api_key},
+            params={"q": query, "count": min(max_results, 50), "mkt": "zh-CN"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        results = []
+        for item in data.get("webPages", {}).get("value", []):
+            results.append(f"{item['name']}\n  {item['url']}\n  {item.get('snippet', '')}")
+        return "\n\n".join(results) if results else "No results found."
+    except Exception as e:
+        return f"Bing API error: {e}"
+
+
+def _bing_scrape_search(query: str, max_results: int) -> str:
+    """直接抓取 cn.bing.com 搜索结果页，用正则提取标题/URL/摘要。"""
+    import urllib.request
+    import urllib.parse
+    import re
+    try:
+        encoded = urllib.parse.quote(query)
+        url = f"https://cn.bing.com/search?q={encoded}&count={min(max_results, 15)}"
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        })
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+
+        # 提取搜索结果：<h2> 中的标题和链接 + <p> 中的摘要
+        results = re.findall(
+            r'<h2[^>]*>.*?<a[^>]*href="([^"]*)"[^>]*>(.*?)</a>.*?</h2>\s*.*?<p[^>]*>(.*?)</p>',
+            html, re.DOTALL | re.IGNORECASE
+        )
+        if not results:
+            return f"No results found for '{query}' (page may require JS or be blocked)"
+
+        lines = []
+        for i, (url, title, snippet) in enumerate(results[:max_results]):
+            title_clean = re.sub(r'<[^>]+>', '', title).strip()
+            snippet_clean = re.sub(r'<[^>]+>', '', snippet).strip()
+            lines.append(f"{i + 1}. {title_clean}\n   {url}\n   {snippet_clean}")
+
+        return "\n\n".join(lines)
+    except Exception as e:
+        return f"Bing search error: {e}"
+
+
 class MCPGateway:
     """本地 MCP 工具网关。
 
@@ -204,15 +257,13 @@ class MCPGateway:
 
     @staticmethod
     def _search_handler(query: str, max_results: int = 10) -> str:
-        """搜索工具（MVP: DuckDuckGo HTML 抓取）。"""
-        import urllib.request
-        import urllib.parse
-        try:
-            encoded = urllib.parse.quote(query)
-            url = f"https://html.duckduckgo.com/html/?q={encoded}"
-            req = urllib.request.Request(url, headers={"User-Agent": "AgentSwarm/0.1"})
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                html = resp.read().decode("utf-8", errors="replace")
-            return f"Search results for '{query}' (raw HTML {len(html)} bytes):\n{html[:3000]}"
-        except Exception as e:
-            return f"Search error: {e}"
+        """搜索工具：Bing Search API（优先）→ Bing 页面抓取（降级）。"""
+        import os
+
+        # 优先用 Bing Search API
+        api_key = os.environ.get("BING_API_KEY", "")
+        if api_key:
+            return _bing_api_search(query, max_results, api_key)
+
+        # 降级：直接抓取 bing.com 搜索结果页
+        return _bing_scrape_search(query, max_results)
