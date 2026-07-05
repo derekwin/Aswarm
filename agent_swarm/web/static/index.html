@@ -188,8 +188,45 @@ function emptyStateHTML(sm) {
     '</div></div>';
 }
 
-function init() { document.getElementById('chatArea').innerHTML = emptyStateHTML(); }
-init();
+function init() {
+  loadConversations();
+}
+
+function loadConversations() {
+  fetch('/api/conversations').then(function(r) { return r.json(); }).then(function(data) {
+    data.forEach(function(c) {
+      conversations[c.id] = { title: c.title, msgs: [], time: formatTime(c.created_at), _loaded: false };
+    });
+    renderConvs();
+  });
+}
+
+function formatTime(iso) {
+  try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+  catch(e) { return ''; }
+}
+
+function loadConversationMessages(convId) {
+  if (conversations[convId]._loaded) return;
+  fetch('/api/conversations/' + convId).then(function(r) { return r.json(); }).then(function(data) {
+    conversations[convId]._loaded = true;
+    if (data.messages && data.messages.length) {
+      // Render messages as HTML bubbles
+      conversations[convId].msgs = data.messages.map(function(m) {
+        if (m.role === 'user') {
+          return '<div class="fade-up flex gap-3.5 max-w-3xl self-end flex-row-reverse">' +
+            '<div class="px-4 py-3.5 bg-[#2d2a5e] text-[#e8e4ff] rounded-2xl rounded-br-md text-sm leading-relaxed">' + esc(m.content) + '</div>' +
+            '<div class="w-8 h-8 rounded-[10px] bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex-shrink-0 flex items-center justify-center text-xs font-bold">U</div></div>';
+        } else {
+          return '<div class="fade-up flex gap-3.5 max-w-3xl self-start">' +
+            '<div class="w-8 h-8 rounded-[10px] bg-gradient-to-br from-accent to-[#a78bfa] flex-shrink-0 flex items-center justify-center text-xs font-bold">S</div>' +
+            '<div class="flex-1 min-w-0"><div class="px-4 py-3.5 bg-surface border border-border rounded-2xl rounded-bl-md text-sm leading-relaxed whitespace-pre-wrap">' + mdRender(m.content) + '</div></div></div>';
+        }
+      });
+    }
+    renderConvs();
+  });
+}
 
 function setConnected(on) {
   document.getElementById('connDot').className = 'w-1.5 h-1.5 rounded-full ' + (on ? 'bg-green' : 'bg-[#333]');
@@ -211,26 +248,29 @@ function toggleSidebar() {
 
 function newConversation() {
   if (eventSource) eventSource.close();
-  var id = 'conv_' + Date.now();
-  conversations[id] = { title: 'New Task', msgs: [], time: new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) };
-  activeConvId = id;
-  renderConvs();
-  document.getElementById('chatArea').innerHTML = emptyStateHTML();
-  document.getElementById('convTitle').textContent = 'New Task';
-  document.getElementById('submitBtn').disabled = false;
-  agentStates = {}; totalAgents = 0; completedAgents = 0; updateProgress();
+  fetch('/api/conversations', { method: 'POST' }).then(function(r) { return r.json(); }).then(function(c) {
+    conversations[c.id] = { title: c.title, msgs: [], time: formatTime(c.created_at), _loaded: true };
+    activeConvId = c.id;
+    renderConvs();
+    document.getElementById('chatArea').innerHTML = emptyStateHTML();
+    document.getElementById('convTitle').textContent = 'New Task';
+    document.getElementById('submitBtn').disabled = false;
+    agentStates = {}; totalAgents = 0; completedAgents = 0; updateProgress();
+  });
 }
 
 function deleteConversation(id, e) {
   e.stopPropagation();
   if (!confirm('Delete this conversation?')) return;
-  delete conversations[id];
-  if (activeConvId === id) {
-    var ids = Object.keys(conversations);
-    if (ids.length) { switchConversation(ids[ids.length-1]); }
-    else { activeConvId = null; document.getElementById('chatArea').innerHTML = emptyStateHTML(); document.getElementById('convTitle').textContent = 'New Task'; }
-  }
-  renderConvs();
+  fetch('/api/conversations/' + id, { method: 'DELETE' }).then(function() {
+    delete conversations[id];
+    if (activeConvId === id) {
+      var ids = Object.keys(conversations);
+      if (ids.length) { switchConversation(ids[ids.length - 1]); }
+      else { activeConvId = null; document.getElementById('chatArea').innerHTML = emptyStateHTML(); document.getElementById('convTitle').textContent = 'New Task'; }
+    }
+    renderConvs();
+  });
 }
 
 function switchConversation(id) {
@@ -239,6 +279,19 @@ function switchConversation(id) {
   activeConvId = id; agentStates = {}; totalAgents = 0; completedAgents = 0; updateProgress();
   var c = conversations[id];
   document.getElementById('convTitle').textContent = c.title;
+  if (!c._loaded) {
+    document.getElementById('chatArea').innerHTML = '<div class="flex items-center justify-center flex-1"><span class="typing text-[#666]">Loading conversation</span></div>';
+    loadConversationMessages(id);
+    // Re-render after messages load
+    setTimeout(function() {
+      if (activeConvId === id) {
+        document.getElementById('chatArea').innerHTML = c._html || (c.msgs && c.msgs.length ? c.msgs.join('') : emptyStateHTML());
+      }
+    }, 300);
+    document.getElementById('submitBtn').disabled = false;
+    renderConvs();
+    return;
+  }
   document.getElementById('chatArea').innerHTML = c._html || (c.msgs && c.msgs.length ? c.msgs.join('') : emptyStateHTML());
   renderConvs();
   document.getElementById('submitBtn').disabled = false;
@@ -298,7 +351,7 @@ function submitTask() {
   var st = document.getElementById('st-' + aid);
 
   setConnected(false);
-  fetch('/run?query=' + encodeURIComponent(q), { method: 'POST' })
+  fetch('/run?query=' + encodeURIComponent(q) + '&conv_id=' + encodeURIComponent(activeConvId), { method: 'POST' })
     .then(function(r) { return r.json(); })
     .then(function(d) {
       if (eventSource) eventSource.close();
@@ -441,6 +494,8 @@ function mdRender(text) {
 }
 
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+init();
 </script>
 </body>
 </html>

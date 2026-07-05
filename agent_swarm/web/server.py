@@ -1,11 +1,11 @@
-"""AgentSwarm Web Server — FastAPI + SSE real-time agent dashboard."""
+"""AgentSwarm Web Server — FastAPI + SSE real-time agent dashboard with SQLite persistence."""
 
 import asyncio
 import json
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -13,16 +13,17 @@ from agent_swarm import (
     MetaScheduler, SwarmOrchestrator, AgentFactory,
     MCPGateway, StateManager, TaskDAG, SwarmState,
 )
+from agent_swarm.web.storage import get_storage
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(title="AgentSwarm Dashboard")
+storage = get_storage()
 
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-# In-memory event queues per task_id
 _streams: dict[str, asyncio.Queue] = {}
 
 
@@ -32,26 +33,63 @@ def _push_event(task_id: str, event: dict):
         q.put_nowait(event)
 
 
+# ── Static ──
+
 @app.get("/", response_class=HTMLResponse)
 async def index():
     return (STATIC_DIR / "index.html").read_text(encoding="utf-8")
 
 
+# ── Conversations API ──
+
+@app.get("/api/conversations")
+async def list_conversations():
+    return storage.list_conversations()
+
+
+@app.post("/api/conversations")
+async def create_conversation(title: str = Query(default="New Task")):
+    conv_id = f"conv_{id(title)}_{len(storage.list_conversations())}"
+    conv = storage.create_conversation(conv_id, title)
+    return conv
+
+
+@app.get("/api/conversations/{conv_id}")
+async def get_conversation(conv_id: str):
+    conv = storage.get_conversation(conv_id)
+    if not conv:
+        raise HTTPException(404, "Conversation not found")
+    conv["messages"] = storage.get_messages(conv_id)
+    return conv
+
+
+@app.delete("/api/conversations/{conv_id}")
+async def delete_conversation(conv_id: str):
+    storage.delete_conversation(conv_id)
+    return {"ok": True}
+
+
+# ── Run Task ──
+
 @app.post("/run")
-async def run_task(query: str = Query(...)):
+async def run_task(query: str = Query(...), conv_id: str = Query(default="")):
+    if not conv_id:
+        conv_id = f"conv_{id(query)}_{len(storage.list_conversations())}"
+        storage.create_conversation(conv_id, "New Task")
+
     task_id = f"task_{id(query)}_{len(_streams)}"
     _streams[task_id] = asyncio.Queue()
-    asyncio.create_task(_execute_task(task_id, query))
-    return {"task_id": task_id}
+    storage.create_task(task_id, conv_id, query)
+    storage.add_message(conv_id, "user", query)
+    asyncio.create_task(_execute_task(task_id, conv_id, query))
+    return {"task_id": task_id, "conv_id": conv_id}
 
 
 @app.get("/stream/{task_id}")
 async def stream(task_id: str):
     q = _streams.get(task_id)
     if not q:
-        return StreamingResponse(
-            _event_stream_empty(), media_type="text/event-stream"
-        )
+        return StreamingResponse(_event_stream_empty(), media_type="text/event-stream")
 
     async def event_gen():
         while True:
@@ -67,17 +105,17 @@ async def _event_stream_empty():
     yield f"data: {json.dumps({'type': 'error', 'msg': 'task not found'})}\n\n"
 
 
-async def _execute_task(task_id: str, query: str):
+# ── Task Execution ──
+
+async def _execute_task(task_id: str, conv_id: str, query: str):
     try:
         gateway = MCPGateway()
         factory = AgentFactory(gateway=gateway, default_model="qwen3.5:35b")
         state_manager = StateManager()
 
         scheduler = MetaScheduler(
-            base_url="http://localhost:11434/v1",
-            api_key="ollama",
-            classifier_model="qwen3:4b",
-            decomposer_model="qwen3.5:35b",
+            base_url="http://localhost:11434/v1", api_key="ollama",
+            classifier_model="qwen3:4b", decomposer_model="qwen3.5:35b",
         )
 
         orchestrator = SwarmOrchestrator(
@@ -89,6 +127,8 @@ async def _execute_task(task_id: str, query: str):
         _push_event(task_id, {"type": "status", "msg": "Classifying task..."})
 
         dag: TaskDAG = await scheduler.process(query)
+        storage.update_task(task_id, "running", dag.intent, len(dag.subtasks))
+        storage.update_conversation_title(conv_id, query[:40])
 
         subtask_info = [
             {"id": s.id, "name": s.agent_config.name, "role": s.agent_config.role,
@@ -96,15 +136,11 @@ async def _execute_task(task_id: str, query: str):
             for s in dag.subtasks
         ]
         _push_event(task_id, {
-            "type": "dag",
-            "intent": dag.intent,
-            "subtasks": subtask_info,
-            "parallel_groups": dag.parallel_groups,
+            "type": "dag", "intent": dag.intent,
+            "subtasks": subtask_info, "parallel_groups": dag.parallel_groups,
         })
-
         _push_event(task_id, {"type": "status", "msg": "Executing agents..."})
 
-        # Hook into orchestrator to stream per-agent events
         original_run = orchestrator._run_single_agent
 
         async def hooked_run(subtask_id, agent, prompt, context=""):
@@ -113,17 +149,19 @@ async def _execute_task(task_id: str, query: str):
                 "agent_name": agent.name, "role": agent.role,
             })
             result = await original_run(subtask_id, agent, prompt, context)
+            storage.add_agent_result(
+                task_id, subtask_id, agent.name,
+                result.state.value, result.output, result.error, result.retry_count,
+            )
             _push_event(task_id, {
                 "type": "agent_done", "subtask_id": subtask_id,
                 "state": result.state.value,
                 "output": (result.output or "")[:500],
-                "error": result.error,
-                "retry_count": result.retry_count,
+                "error": result.error, "retry_count": result.retry_count,
             })
             return result
 
         orchestrator._run_single_agent = hooked_run
-
         state: SwarmState = await orchestrator.execute(dag)
 
         results = [
@@ -132,18 +170,20 @@ async def _execute_task(task_id: str, query: str):
             for r in state.subtask_results.values()
         ]
 
+        summary = orchestrator.aggregator.aggregate(list(state.subtask_results.values()))
+        storage.update_task(task_id, "completed")
+        storage.add_message(conv_id, "assistant", summary)
+
         _push_event(task_id, {
-            "type": "done",
-            "summary": orchestrator.aggregator.aggregate(list(state.subtask_results.values())),
-            "results": results,
+            "type": "done", "summary": summary, "results": results,
         })
 
     except Exception as e:
         logger.exception(f"Task {task_id} failed")
+        storage.update_task(task_id, "failed")
         _push_event(task_id, {"type": "error", "msg": str(e)})
 
     finally:
-        # Clean up after 30 seconds
         await asyncio.sleep(30)
         _streams.pop(task_id, None)
 
