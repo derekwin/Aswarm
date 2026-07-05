@@ -11,15 +11,15 @@ const I18N = {
   en: { newTask:'New Task',send:'Send',settings:'Settings',save:'Saved',noConvs:'No conversations',
     searchConv:'Search conversations...',taskPlaceholder:'Describe your task...',
     emptyTitle:'What do you want to research?',emptyDesc:'Describe your task.',
-    classifying:'Classifying task',executing:'Executing agents',complete:'Complete',
+    decomposing:'Decomposing task',executing:'Executing agents',complete:'Complete',
     loadError:'Connection lost.',deleteConfirm:'Delete this conversation?',
-    agents:'agents',groups:'groups',retries:'Retries' },
+    agents:'agents',groups:'groups',retries:'Retries',analyzing:'Analyzing task' },
   zh: { newTask:'新建任务',send:'发送',settings:'设置',save:'已保存',noConvs:'暂无对话',
     searchConv:'搜索对话...',taskPlaceholder:'描述你的任务...',
     emptyTitle:'想要研究什么？',emptyDesc:'描述你的任务。',
-    classifying:'正在分类任务',executing:'正在执行 Agent',complete:'完成',
+    decomposing:'正在拆解任务',executing:'正在执行 Agent',complete:'完成',
     loadError:'连接已断开。',deleteConfirm:'确定删除此对话？',
-    agents:'个 Agent',groups:'组',retries:'次重试' },
+    agents:'个 Agent',groups:'组',retries:'次重试',analyzing:'分析任务中' },
 }
 
 function reducer(state, action) {
