@@ -43,12 +43,16 @@
     <div class="progress-bar" id="progressBar" style="display:none"><div class="fill" id="progressFill"></div></div>
     <div class="chat-area" id="chatArea"></div>
 
-    <div class="input-area">
-      <div class="input-wrapper">
-        <textarea id="queryInput" rows="1"></textarea>
-        <button id="submitBtn" onclick="UI.submitTask()" data-i18n="send">Send</button>
-      </div>
+  <div class="input-area">
+    <div class="input-wrapper">
+      <label class="upload-btn" title="Upload file (PDF, text)">
+        <input type="file" id="fileInput" accept=".pdf,.txt,.md,.py,.json,.csv,.log" onchange="UI.handleFileUpload()" style="display:none">
+        📎
+      </label>
+      <textarea id="queryInput" rows="1" oninput="UI.autoResize(this)"></textarea>
+      <button id="submitBtn" onclick="UI.submitTask()" data-i18n="send">Send</button>
     </div>
+  </div>
   </main>
 </div>
 

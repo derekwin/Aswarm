@@ -5,7 +5,7 @@ import json
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, UploadFile, File
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -104,6 +104,28 @@ async def get_conversation(conv_id: str):
 async def delete_conversation(conv_id: str):
     storage.delete_conversation(conv_id)
     return {"ok": True}
+
+
+# ── File Upload ──
+
+@app.post("/api/upload")
+async def upload_file(file: UploadFile = File(...)):
+    content = ""
+    filename = file.filename or "unknown"
+    try:
+        raw = await file.read()
+        if filename.lower().endswith(".pdf"):
+            from PyPDF2 import PdfReader
+            from io import BytesIO
+            reader = PdfReader(BytesIO(raw))
+            content = "\n".join(page.extract_text() or "" for page in reader.pages)
+        elif filename.lower().endswith((".txt", ".md", ".py", ".json", ".csv", ".log", ".yaml", ".yml")):
+            content = raw.decode("utf-8", errors="replace")
+        else:
+            content = raw.decode("utf-8", errors="replace")
+        return {"filename": filename, "content": content[:50000], "size": len(raw)}
+    except Exception as e:
+        return {"filename": filename, "error": str(e), "size": len(raw)}
 
 
 # ── Run Task ──

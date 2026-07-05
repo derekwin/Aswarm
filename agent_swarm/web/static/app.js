@@ -262,6 +262,29 @@ const UI = {
     const wrapper = D(id);
     wrapper.querySelector(".bubble").innerHTML = Utils.esc(wrapper.querySelector(".bubble").querySelector("textarea")?.value || wrapper.querySelector(".bubble").textContent);
   },
+
+  // ── Textarea auto-resize ──
+  autoResize(el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 140) + "px"; },
+
+  // ── File Upload ──
+  async handleFileUpload() {
+    const file = D("fileInput").files[0]; if (!file) return;
+    D("submitBtn").disabled = true;
+    const formData = new FormData(); formData.append("file", file);
+    try {
+      const resp = await fetch("/api/upload", { method: "POST", body: formData });
+      const data = await resp.json();
+      if (data.content) {
+        const ta = D("queryInput");
+        const prefix = ta.value ? ta.value + "\n\n--- File: " + data.filename + " ---\n" : "Analyze this file: " + data.filename + "\n\n";
+        ta.value = prefix + data.content.slice(0, 8000);
+        UI.autoResize(ta);
+      } else if (data.error) {
+        Toast.show("Upload failed: " + data.error);
+      }
+    } catch (e) { Toast.show("Upload failed"); }
+    D("submitBtn").disabled = false; D("fileInput").value = "";
+  },
   _assistantBubble(content, id) {
     return '<div class="fade-up message assistant" id="' + (id || "") + '"><div class="avatar assistant">S</div>' +
       '<div class="flex-1 min-w-0"><div class="bubble assistant">' + Utils.mdRender(content) +
