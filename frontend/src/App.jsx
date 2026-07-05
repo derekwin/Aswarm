@@ -235,7 +235,7 @@ export default function App() {
 function SettingsModal() {
   const { state, dispatch, t } = useApp()
   const [provider, setProvider] = React.useState('ollama')
-  const [cfg, setCfg] = React.useState({ llm_base_url:'',llm_api_key:'',classifier_model:'',decomposer_model:'',default_model:'' })
+  const [cfg, setCfg] = React.useState({ llm_base_url:'',llm_api_key:'',decomposer_model:'',default_model:'' })
   React.useEffect(()=>{fetch('/api/settings').then(r=>r.json()).then(setCfg).catch(()=>{})},[])
   const save = async () => { await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});dispatch({type:'SET_SETTINGS_OPEN',payload:false});dispatch({type:'ADD_TOAST',payload:'✓ '+t('save')}) }
   return (
@@ -245,7 +245,6 @@ function SettingsModal() {
         <div className="tab-bar">{['ollama','openai','anthropic'].map(p=><button key={p} className={'tab-btn'+(provider===p?' active':'')} onClick={()=>setProvider(p)}>{p.charAt(0).toUpperCase()+p.slice(1)}</button>)}</div>
         <div className="form-group"><label className="form-label">Base URL</label><input className="form-input" value={cfg.llm_base_url} onChange={e=>setCfg({...cfg,llm_base_url:e.target.value})} /></div>
         {provider!=='ollama'&&<div className="form-group"><label className="form-label">API Key</label><input className="form-input" value={cfg.llm_api_key} onChange={e=>setCfg({...cfg,llm_api_key:e.target.value})} /></div>}
-        <div className="form-group"><label className="form-label">Classifier Model</label><input className="form-input" value={cfg.classifier_model} onChange={e=>setCfg({...cfg,classifier_model:e.target.value})} /></div>
         <div className="form-group"><label className="form-label">Decomposer Model</label><input className="form-input" value={cfg.decomposer_model} onChange={e=>setCfg({...cfg,decomposer_model:e.target.value})} /></div>
         <div className="form-group"><label className="form-label">Default Agent Model</label><input className="form-input" value={cfg.default_model} onChange={e=>setCfg({...cfg,default_model:e.target.value})} /></div>
         <button className="form-submit" onClick={save}>{t('save')}</button>
