@@ -129,16 +129,37 @@ function DAGView({ data }) {
     const render = () => {
       try {
         let mm = 'graph LR\n'
-        const colors = ['#6c5ce7', '#00d26a', '#f5a623', '#f93a3a']
+        const colors = ['#6c5ce7','#00d26a','#f5a623','#f93a3a']
         data.parallel_groups.forEach((g, gi) => {
-          mm += `  subgraph G${gi + 1}[G${gi + 1}]\n    style G${gi + 1} fill:var(--bg-deeper),stroke:${colors[gi % 4]}\n`
-          g.forEach(tid => { const s = data.subtasks?.find(x => x.id === tid) || {}; mm += `    ${tid}["${(s.name || tid).slice(0, 18)}"]\n` })
+          mm += `  subgraph G${gi+1}[Group ${gi+1}]\n    style G${gi+1} fill:#1a1a1a,stroke:${colors[gi%4]}\n`
+          g.forEach(tid => {
+            const s = data.subtasks?.find(x => x.id === tid) || {}
+            const label = mermaidSafe(s.name || tid, 20)
+            mm += `    ${tid}["${label}"]\n`
+          })
           mm += '  end\n'
         })
         data.subtasks?.forEach(s => s.depends_on?.forEach(d => mm += `  ${d} --> ${s.id}\n`))
         if (window.mermaid) window.mermaid.render('dag-' + Date.now(), mm).then(r => setSvg(r.svg))
-      } catch (e) { }
+      } catch (e) { console.error('Mermaid render error:', e) }
     }
+    if (!window.mermaid) {
+      const s = document.createElement('script'); s.src = '/static/mermaid.min.js'
+      s.onload = () => { window.mermaid?.initialize({ startOnLoad: true, theme: 'dark' }); render() }
+      document.head.appendChild(s)
+    } else render()
+  }, [data])
+  return <div dangerouslySetInnerHTML={{ __html: svg }} />
+}
+
+function mermaidSafe(str, maxLen) {
+  return (str || '')
+    .replace(/[\[\]{}()"'`#&;:<>\\]/g, '')  // remove Mermaid-breaking chars
+    .replace(/_/g, ' ')                       // underscores to spaces
+    .replace(/\s+/g, ' ')                     // collapse whitespace
+    .slice(0, maxLen)
+    .trim() || 'Agent'
+}
     if (!window.mermaid) {
       const s = document.createElement('script'); s.src = '/static/mermaid.min.js'
       s.onload = () => { window.mermaid?.initialize({ startOnLoad: true, theme: 'dark' }); render() }
