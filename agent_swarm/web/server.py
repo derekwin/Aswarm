@@ -36,7 +36,6 @@ _streams: dict[str, asyncio.Queue] = {}
 _default_settings = {
     "llm_base_url": "http://localhost:11434/v1",
     "llm_api_key": "ollama",
-    "classifier_model": "qwen3:4b",
     "decomposer_model": "qwen3.5:35b",
     "default_model": "qwen3.5:35b",
 }
@@ -258,7 +257,7 @@ async def _execute_task(task_id: str, conv_id: str, query: str):
 
         scheduler = MetaScheduler(
             base_url=settings["llm_base_url"], api_key=settings["llm_api_key"],
-            classifier_model=settings["classifier_model"], decomposer_model=settings["decomposer_model"],
+            decomposer_model=settings["decomposer_model"],
         )
 
         orchestrator = SwarmOrchestrator(

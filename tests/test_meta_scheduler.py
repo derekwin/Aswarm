@@ -150,24 +150,11 @@ class TestRouter:
 
 class TestMetaScheduler:
     @pytest.mark.asyncio
-    async def test_classify(self):
-        scheduler = MetaScheduler(
-            base_url="http://localhost:11434/v1",
-            api_key="ollama",
-            classifier_model="qwen3:4b",
-        )
-
-        with patch.object(scheduler, "_call_llm", new_callable=AsyncMock) as mock_llm:
-            mock_llm.return_value = "research"
-            intent = await scheduler.classify("调研AI芯片市场")
-            assert intent == "research"
-
-    @pytest.mark.asyncio
     async def test_decompose(self):
         scheduler = MetaScheduler(
             base_url="http://localhost:11434/v1",
             api_key="ollama",
-            decomposer_model="qwen3:14b",
+            decomposer_model="qwen3.5:35b",
         )
 
         with patch.object(scheduler, "_call_llm", new_callable=AsyncMock) as mock_llm:
@@ -183,29 +170,10 @@ class TestMetaScheduler:
         scheduler = MetaScheduler(
             base_url="http://localhost:11434/v1",
             api_key="ollama",
-            decomposer_model="qwen3:14b",
+            decomposer_model="qwen3.5:35b",
         )
 
         with patch.object(scheduler, "_call_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = "invalid json response without proper structure"
             with pytest.raises(ValueError, match="parse"):
                 await scheduler.decompose("test", "research")
-
-    @pytest.mark.asyncio
-    async def test_full_pipeline(self):
-        """完整 pipeline: classify → decompose → validate。"""
-        scheduler = MetaScheduler(
-            base_url="http://localhost:11434/v1",
-            api_key="ollama",
-            classifier_model="qwen3:4b",
-            decomposer_model="qwen3:14b",
-        )
-
-        with patch.object(scheduler, "_call_llm", new_callable=AsyncMock) as mock_llm:
-            mock_llm.side_effect = ["research", json.dumps(SAMPLE_DECOMPOSER_OUTPUT)]
-
-            dag = await scheduler.process("调研2025年AI芯片市场")
-
-            assert dag.intent == "research"
-            assert len(dag.subtasks) == 2
-            assert dag.subtasks[0].agent_config.name == "searcher"

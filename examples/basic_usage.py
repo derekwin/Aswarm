@@ -31,7 +31,6 @@ async def main():
     scheduler = MetaScheduler(
         base_url="http://localhost:11434/v1",
         api_key="ollama",
-        classifier_model="qwen3:4b",
         decomposer_model="qwen3.5:35b",
     )
 

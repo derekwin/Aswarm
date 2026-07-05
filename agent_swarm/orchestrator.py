@@ -12,7 +12,6 @@ from agent_swarm.mcp_gateway import MCPGateway
 from agent_swarm.agent_factory import AgentFactory, Agent
 from agent_swarm.state_manager import StateManager
 from agent_swarm.context import get_context
-from agent_swarm.trace import trace
 
 logger = logging.getLogger(__name__)
 

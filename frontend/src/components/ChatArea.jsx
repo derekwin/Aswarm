@@ -80,45 +80,15 @@ export default function ChatArea() {
   )
 }
 
-function ActivityFeed() {
-  const { state } = useApp()
-  const conv = state.activeConvId ? state.conversations[state.activeConvId] : null
-  const activity = conv?.activity || []
-  const ref = useRef(null)
-  useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight }, [activity.length])
-  if (!activity.length) return null
-
-  const toolIcons = { search_engine: '🔍', webfetch: '🌐', python_executor: '🐍', file_writer: '📝', file_reader: '📖', browser: '🖥', shell: '💻' }
-
-  return (
-    <div style={{ marginTop: 12, background: 'var(--bg-deeper)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-      <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)', fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span>⚡ Live Activity</span>
-        <span style={{ fontSize: '0.6rem', padding: '1px 6px', borderRadius: 4, background: 'var(--accent-glow)', color: 'var(--accent)' }}>{activity.length}</span>
-      </div>
-      <div ref={ref} style={{ maxHeight: 200, overflowY: 'auto', padding: '4px 0' }}>
-        {activity.map((a, i) => (
-          <div key={i} className="fade-up" style={{ padding: '4px 14px', fontSize: '0.7rem', color: 'var(--text-secondary)', borderLeft: '2px solid var(--accent)', marginLeft: 8, marginBottom: 2 }}>
-            <span style={{ fontWeight: 500, color: 'var(--text)' }}>{a.agent}</span>
-            <span style={{ color: 'var(--text-tertiary)', margin: '0 4px' }}>→</span>
-            <span>{toolIcons[a.tool] || '🔧'}</span>
-            <span style={{ fontWeight: 500 }}>{a.tool}</span>
-            <span style={{ color: 'var(--text-tertiary)', marginLeft: 6, fontSize: '0.65rem' }}>{a.args?.slice(0, 80)}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 function mdRender(text) {
   if (!text) return ''
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/```(\w*)\n([\s\S]*?)```/g, '<div class="md-codeblock">$2</div>')
-    .replace(/\*\*(.+?)\*\*\s*/g, '<span class="md-bold">$1</span>')
-    .replace(/`([^`]+)`/g, '<code class="md-code">$1</code>')
-    .replace(/\n/g, '<br>')
+  return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/```(\w*)\n([\s\S]*?)```/g,'<div class="md-codeblock">$2</div>')
+    .replace(/\*\*(.+?)\*\*\s*/g,'<span class="md-bold">$1</span>')
+    .replace(/`([^`]+)`/g,'<code class="md-code">$1</code>')
+    .replace(/\n/g,'<br>')
 }
+
 
 function DAGView({ data }) {
   const [svg, setSvg] = useState('')

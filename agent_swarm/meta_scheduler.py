@@ -1,6 +1,6 @@
-"""Meta-Scheduler: 意图分类、任务分解、DAG 校验。
+"""Meta-Scheduler: task decomposition and DAG validation.
 
-核心流程: classify → decompose → validate → TaskDAG
+Core flow: decompose → validate → TaskDAG
 """
 
 import json
@@ -10,7 +10,6 @@ import re
 from openai import AsyncOpenAI
 
 from agent_swarm.models import TaskDAG, Subtask, DivergenceWarning
-from agent_swarm.prompts.classifier import CLASSIFIER_SYSTEM_PROMPT, CLASSIFIER_USER_TEMPLATE
 from agent_swarm.prompts.decomposer import (
     DECOMPOSER_SYSTEM_PROMPT,
     DECOMPOSER_USER_TEMPLATE,
@@ -91,26 +90,24 @@ class Router:
 
 
 class MetaScheduler:
-    """元调度器: 负责意图分类、任务分解、DAG 校验。
+    """Task decomposition and DAG validation using LLM.
 
-    使用两个 LLM:
-    - classifier_model (小模型, 1B-4B): 快速意图分类
-    - decomposer_model (中等模型, 7B-14B): 任务拆分 + Agent 配置生成
+    Uses a decomposer model (14B-35B) to break complex tasks into
+    independently executable subtasks with a DAG dependency graph.
+    Each subtask includes an on-the-fly Agent configuration.
 
-    用法:
+    Usage:
         scheduler = MetaScheduler(base_url="http://localhost:11434/v1", api_key="ollama")
-        dag = await scheduler.process("调研2025年AI芯片市场")
+        dag = await scheduler.decompose("Research AI chip market", "research")
     """
 
     def __init__(
         self,
         base_url: str,
         api_key: str,
-        classifier_model: str = "qwen3:4b",
-        decomposer_model: str = "qwen3:14b",
+        decomposer_model: str = "qwen3.5:35b",
     ):
         self.client = AsyncOpenAI(base_url=base_url, api_key=api_key)
-        self.classifier_model = classifier_model
         self.decomposer_model = decomposer_model
         self.router = Router()
         self._project_context: str | None = None
@@ -121,17 +118,12 @@ class MetaScheduler:
     def check_if_divergent(self, query: str) -> DivergenceWarning | None:
         if not self._project_context:
             return None
-
         context_lower = self._project_context.lower()
         query_lower = query.lower()
-
-        # 简单启发式：提取项目描述中的关键词，检查新查询是否含这些词
         keywords = set(context_lower.split()) - {
             "的", "和", "与", "在", "是", "了", "the", "a", "an", "is", "of", "to", "in", "for"
         }
-        # 保留有意义的词（长度 > 1 的字母/中文词）
         keywords = {k for k in keywords if len(k) > 1}
-
         overlap = sum(1 for kw in keywords if kw in query_lower)
         if overlap == 0 and len(keywords) > 3:
             return DivergenceWarning(
@@ -140,47 +132,12 @@ class MetaScheduler:
                 new_task_summary=f'"{query[:80]}"',
                 suggestion=(
                     "New task appears unrelated to current project. "
-                    "Consider creating a separate project directory (e.g. mkdir new-project/) "
-                    "to avoid mixing code and checkpoints with existing work. Continue in current directory?"
+                    "Consider creating a separate project directory."
                 ),
             )
         return DivergenceWarning(diverged=False)
 
-    async def process(self, query: str) -> TaskDAG:
-        """完整处理流水线: classify → decompose → validate。"""
-        intent = await self.classify(query)
-        dag = await self.decompose(query, intent)
-
-        # 更新 Router 的工具列表校验
-        all_tools = set()
-        for s in dag.subtasks:
-            all_tools.update(s.agent_config.tools)
-        # MVP: 不做严格工具校验，允许 Decomposer 定义的任何工具名
-        # self.router.available_tools = list(all_tools)
-
-        self.router.validate(dag)
-        return dag
-
-    async def classify(self, query: str) -> str:
-        """意图分类 - 用小模型快速判断任务类型。"""
-        user_prompt = CLASSIFIER_USER_TEMPLATE.format(query=query)
-
-        response = await self._call_llm(
-            model=self.classifier_model,
-            system_prompt=CLASSIFIER_SYSTEM_PROMPT,
-            user_prompt=user_prompt,
-            temperature=0.1,
-        )
-
-        intent = response.strip().lower()
-        valid_intents = {"research", "code", "write", "analyze", "multi"}
-        if intent not in valid_intents:
-            logger.warning(f"Unknown intent '{intent}', defaulting to 'multi'")
-            intent = "multi"
-
-        return intent
-
-    async def decompose(self, query: str, intent: str) -> TaskDAG:
+    async def decompose(self, query: str, intent: str = "multi") -> TaskDAG:
         """任务分解 - 拆分任务 DAG 并现场生成 Agent 配置。"""
         # 构建 few-shot 示例
         few_shot_text = self._build_few_shot()
