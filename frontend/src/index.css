@@ -44,15 +44,15 @@ body {
   border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0;
 }
 .sidebar-header {
-  padding: 22px 18px 14px; display: flex; align-items: center; gap: 12px;
+  padding: 14px 18px; display: flex; align-items: center; gap: 12px;
   border-bottom: 1px solid var(--border);
 }
 .sidebar-header .logo {
-  width: 32px; height: 32px; border-radius: var(--radius-xs);
+  width: 28px; height: 28px; border-radius: var(--radius-xs);
   background: linear-gradient(135deg, var(--accent), #a78bfa);
-  display: flex; align-items: center; justify-content: center; font-size: 0.875rem; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 0.8125rem; flex-shrink: 0;
 }
-.sidebar-header h2 { font-size: 1.0625rem; font-weight: 700; letter-spacing: -0.2px; }
+.sidebar-header h2 { font-size: 0.9375rem; font-weight: 700; letter-spacing: -0.2px; align-self: center; }
 
 .new-conv-btn {
   margin: 12px 14px; padding: 11px 16px; border-radius: var(--radius);
