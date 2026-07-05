@@ -202,7 +202,6 @@ export default function App() {
               <button className="header-btn" onClick={()=>dispatch({type:'SET_THEME',payload:state.theme==='dark'?'light':'dark'})}>{state.theme==='dark'?'☀️':'🌙'}</button>
               <button className="header-btn" onClick={()=>dispatch({type:'SET_LANG',payload:state.lang==='zh'?'en':'zh'})} style={{fontSize:'0.75rem'}}>{state.lang==='zh'?'EN':'中'}</button>
               <button className="header-btn" onClick={()=>dispatch({type:'SET_SETTINGS_OPEN',payload:true})}>⚙</button>
-              <button className="header-btn" onClick={()=>dispatch({type:'SET_MONITOR',payload:!state.monitorOpen})}>◫</button>
               <span className={'conn-dot '+(state.connected?'on':'off')} />
               <span className="model-badge">qwen3.5:35b</span>
             </div>
