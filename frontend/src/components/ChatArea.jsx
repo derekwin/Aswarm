@@ -20,6 +20,23 @@ export default function ChatArea() {
   }
 
   if (!conv || !conv.messages?.length) {
+    // Landing page: no conversations at all
+    if (Object.keys(state.conversations).length === 0) {
+    return (
+      <div className="chat-area">
+        <div className="empty-state">
+          <div className="icon" style={{width:72,height:72,fontSize:'2rem'}}>⚡</div>
+          <h2 style={{fontSize:'1.5rem'}}>AgentSwarm</h2>
+          <p>{t('emptyDesc')}</p>
+          <button className="new-conv-btn" onClick={async()=>{
+            const r=await fetch('/api/conversations?title=New+Task',{method:'POST'})
+            const c=await r.json()
+            dispatch({type:'ADD_CONV',payload:{id:c.id,title:c.title,messages:[],time:new Date(c.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),_loaded:true,agents:{},totalAgents:0,completedAgents:0}})
+          }} style={{padding:'12px 28px',fontSize:'0.9rem'}}>Start a New Task</button>
+        </div>
+      </div>
+    )}
+    // Empty active conversation
     return (
       <div className="chat-area">
         <div className="empty-state">

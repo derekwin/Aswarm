@@ -188,6 +188,8 @@ export default function App() {
 
   const value = { state, dispatch, t, eventSourceRef, runTask, cancelTask, setMonitorWidth }
 
+  const hasConvs = Object.keys(state.conversations).length > 0
+
   return (
     <AppContext.Provider value={value}>
       <div id="app">
@@ -207,7 +209,7 @@ export default function App() {
             </div>
           </div>
           <ChatArea />
-          <InputArea />
+          {hasConvs && <InputArea />}
         </main>
         {state.monitorOpen && <LiveMonitor />}
       </div>
