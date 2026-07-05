@@ -78,7 +78,7 @@ export default function ChatArea() {
             ) : (
               <div className={'bubble ' + m.role}>
                 {m.typing
-                  ? <div className="typing"><span style={{marginRight:6}}>🧠</span>{t((m.content||'').toLowerCase().includes('decompos') ? 'decomposing' : (m.content||'').toLowerCase().includes('execut') ? 'executing' : 'analyzing')}<span className="pulse-dot" style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:'var(--accent)',marginLeft:6,animation:'pulse-dot 1.2s infinite'}} /></div>
+                  ? <span className="typing">{t('decomposing')}</span>
                   : m.content && m.content.startsWith('<')
                     ? <span dangerouslySetInnerHTML={{ __html: m.content }} />
                     : <span dangerouslySetInnerHTML={{ __html: mdRender(m.content || '') }} />
