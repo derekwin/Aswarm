@@ -23,6 +23,7 @@ storage = get_storage()
 
 STATIC_DIR = Path(__file__).parent / "static"
 SETTINGS_FILE = Path("data/settings.json")
+app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 _streams: dict[str, asyncio.Queue] = {}
