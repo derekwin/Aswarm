@@ -68,9 +68,6 @@ export default function ChatArea() {
                 }
               </div>
             )}
-            {m.dag && editingIdx !== i && <div className="dag-container"><DAGView data={m.dag} /></div>}
-            {m.dag && editingIdx !== i && <AgentStepper />}
-            {m.dag && editingIdx !== i && <ActivityFeed />}
             {m.role === 'user' && editingIdx !== i && (
               <div className="bubble-actions">
                 <button className="bubble-action-btn" onClick={() => startEdit(i, m.content)}>✎ Edit</button>

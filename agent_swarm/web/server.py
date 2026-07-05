@@ -269,6 +269,8 @@ async def _execute_task(task_id: str, conv_id: str, query: str):
         _push_event(task_id, {"type": "status", "msg": "Classifying task..."})
 
         dag: TaskDAG = await scheduler.process(query)
+
+        _push_event(task_id, {"type": "status", "msg": "Decomposing task..."})
         storage.update_task(task_id, "running", dag.intent, len(dag.subtasks))
         storage.update_conversation_title(conv_id, query[:40])
 

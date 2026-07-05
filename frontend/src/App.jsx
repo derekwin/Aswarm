@@ -125,8 +125,8 @@ export default function App() {
             dispatch({ type: 'UPDATE_LAST_MSG', payload: { id: convId, updates: { content: d.msg } } })
             break
           case 'dag':
-            dispatch({ type: 'SET_CONV_META', payload: { id: convId, meta: { totalAgents: d.subtasks.length, completedAgents: 0, agents: {} } } })
-            dispatch({ type: 'UPDATE_LAST_MSG', payload: { id: convId, updates: { content: 'Decomposed into ' + d.subtasks.length + ' agents across ' + d.parallel_groups.length + ' groups.', dag: d } } })
+            dispatch({ type: 'SET_CONV_META', payload: { id: convId, meta: { totalAgents: d.subtasks.length, completedAgents: 0, agents: {}, dag: d } } })
+            dispatch({ type: 'UPDATE_LAST_MSG', payload: { id: convId, updates: { content: 'Decomposed into ' + d.subtasks.length + ' agents.' } } })
             break
           case 'agent_start':
             dispatch({ type: 'UPDATE_AGENT', payload: { convId, id: d.subtask_id, data: { state: 'running', name: d.agent_name, role: d.role } } })

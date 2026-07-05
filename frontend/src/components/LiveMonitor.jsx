@@ -1,5 +1,5 @@
 import { useApp } from '../App'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 export default function LiveMonitor() {
   const { state, dispatch } = useApp()
@@ -43,18 +43,19 @@ export default function LiveMonitor() {
           </div>
           <div className="monitor-progress"><div className="monitor-progress-fill" style={{ width: pct + '%' }} /></div>
           <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
-            {['agents','files'].map(t => (
+            {['agents','activity','files'].map(t => (
               <button key={t} onClick={() => setTab(t)}
-                style={{ flex:1, padding:'8px', border:'none', background: tab===t?'var(--surface)':'none', color: tab===t?'var(--text)':'var(--text-secondary)', cursor:'pointer', fontSize:'0.75rem', fontWeight:500, borderBottom: tab===t?'2px solid var(--accent)':'2px solid transparent', transition:'all 0.15s' }}>
-                {t === 'agents' ? 'Agents' : 'Files'}
+                style={{ flex:1, padding:'8px', border:'none', background: tab===t?'var(--surface)':'none', color: tab===t?'var(--text)':'var(--text-secondary)', cursor:'pointer', fontSize:'0.7rem', fontWeight:500, borderBottom: tab===t?'2px solid var(--accent)':'2px solid transparent', transition:'all 0.15s' }}>
+                {t === 'agents' ? 'Agents' : t === 'activity' ? 'Activity' : 'Files'}
               </button>
             ))}
           </div>
           {tab === 'agents' ? (
             <div className="monitor-agents">
-              {agents.length === 0 && <div className="empty-conv" style={{ padding: 16 }}>No agents running</div>}
+              {conv?.dag && <DAGView data={conv.dag} />}
+              {agents.length === 0 && !conv?.dag && <div className="empty-conv" style={{ padding: 16 }}>Waiting for task...</div>}
               {agents.map((a, i) => (
-                <div key={a.name + i} className={'monitor-agent-card ' + a.state}>
+                <div key={a.name + i} className={'monitor-agent-card ' + a.state} onClick={() => dispatch({ type: 'SET_PANEL', payload: { ...a, name: a.name || 'Agent-' + i } })}>
                   <div className="monitor-agent-icon" style={a.state==='completed'?{background:'var(--green)',borderColor:'var(--green)',color:'#fff'}:a.state==='failed'?{background:'var(--red)',borderColor:'var(--red)',color:'#fff'}:a.state==='running'?{borderColor:'var(--accent)',color:'var(--accent)',animation:'pulse-dot 1.2s infinite'}:{}}>
                     {a.state === 'completed' ? '✓' : a.state === 'failed' ? '✗' : '·'}
                   </div>
@@ -64,6 +65,20 @@ export default function LiveMonitor() {
                   </div>
                 </div>
               ))}
+            </div>
+          ) : tab === 'activity' ? (
+            <div className="monitor-agents">
+              {(conv?.activity || []).length === 0 && <div className="empty-conv" style={{ padding: 16 }}>No activity yet</div>}
+              {(conv?.activity || []).map((a, i) => {
+                const icons = { search_engine: '🔍', webfetch: '🌐', python_executor: '🐍', file_writer: '📝', file_reader: '📖', browser: '🖥', shell: '💻' }
+                return (
+                  <div key={i} style={{ padding: '4px 8px', fontSize: '0.65rem', color: 'var(--text-secondary)', borderLeft: '2px solid var(--accent)', marginLeft: 6, marginBottom: 2 }}>
+                    <span style={{ fontWeight: 500, color: 'var(--text)' }}>{a.agent}</span>
+                    <span style={{ color: 'var(--text-tertiary)' }}> → {icons[a.tool] || '🔧'} {a.tool}</span>
+                    <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: 1 }}>{a.args?.slice(0, 60)}</div>
+                  </div>
+                )
+              })}
             </div>
           ) : (
             <div className="monitor-agents">
@@ -110,4 +125,29 @@ function formatSize(bytes) {
   if (bytes < 1024) return bytes + ' B'
   if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB'
   return (bytes / 1048576).toFixed(1) + ' MB'
+}
+
+function DAGView({ data }) {
+  const [svg, setSvg] = useState('')
+  useEffect(() => {
+    const render = () => {
+      try {
+        let mm = 'graph LR\n'
+        const colors = ['#6c5ce7','#00d26a','#f5a623','#f93a3a']
+        data.parallel_groups?.forEach((g, gi) => {
+          mm += `  subgraph G${gi+1}[Group ${gi+1}]\n    style G${gi+1} fill:#1a1a1a,stroke:${colors[gi%4]}\n`
+          g.forEach(tid => { const s = data.subtasks?.find(x => x.id === tid) || {}; mm += `    ${tid}["${(s.name||tid).replace(/[\[\]{}()"'`#&;:<>\\]/g,'').replace(/_/g,' ').slice(0,18).trim()||'Agent'}"]\n` })
+          mm += '  end\n'
+        })
+        data.subtasks?.forEach(s => s.depends_on?.forEach(d => mm += `  ${d} --> ${s.id}\n`))
+        if (window.mermaid) window.mermaid.render('dag-monitor-' + Date.now(), mm).then(r => setSvg(r.svg))
+      } catch (e) {}
+    }
+    if (!window.mermaid) {
+      const s = document.createElement('script'); s.src = '/static/mermaid.min.js'
+      s.onload = () => { window.mermaid?.initialize({ startOnLoad: true, theme: 'dark' }); render() }
+      document.head.appendChild(s)
+    } else render()
+  }, [data])
+  return svg ? <div className="dag-container" dangerouslySetInnerHTML={{ __html: svg }} /> : null
 }
