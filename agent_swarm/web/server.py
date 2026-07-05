@@ -256,7 +256,7 @@ async def _execute_task(task_id: str, conv_id: str, query: str):
         # Composition Root: wire dependencies
         tools = ToolRegistry()
         llm = LLMClient(base_url=settings["llm_base_url"], api_key=settings["llm_api_key"])
-        factory = AgentFactory(gateway=MCPGateway())  # factory still uses MCPGateway for tool validation
+        factory = AgentFactory(gateway=MCPGateway(), default_model=settings["default_model"])
         state_manager = StateManager()
 
         scheduler = MetaScheduler(
