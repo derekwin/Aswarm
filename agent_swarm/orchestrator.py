@@ -6,7 +6,7 @@ import logging
 from openai import AsyncOpenAI
 
 from agent_swarm.models import (
-    TaskDAG, SwarmState, SubtaskResult, SubtaskState
+    TaskDAG, SwarmState, SubtaskResult, SubtaskState, Subtask, AgentConfig
 )
 from agent_swarm.mcp_gateway import MCPGateway
 from agent_swarm.agent_factory import AgentFactory, Agent
@@ -161,6 +161,22 @@ class SwarmOrchestrator:
                         if r.state == SubtaskState.FAILED and attempt < self.max_subtask_retries
                     ]
 
+            for sid, result in list(results.items()):
+                if result.state == SubtaskState.FAILED:
+                    subtask = self._find_subtask(dag, sid)
+                    new_subtask = await self._replan_subtask(dag, subtask, result)
+                    if new_subtask:
+                        logger.info(f"  [{sid}] Re-planning with new approach")
+                        for i, s in enumerate(dag.subtasks):
+                            if s.id == sid:
+                                dag.subtasks[i] = new_subtask
+                                break
+                        agent = self.factory.create(new_subtask.agent_config)
+                        context = self._gather_context(state, new_subtask.depends_on)
+                        new_result = await self._run_single_agent(sid, agent, new_subtask.prompt, context)
+                        new_result.retry_history = result.retry_history + ["Re-planned: new approach generated"]
+                        results[sid] = new_result
+
             for result in results.values():
                 state = self.state_manager.update_subtask(state, result)
 
@@ -212,6 +228,40 @@ class SwarmOrchestrator:
     # ─── Agent 执行 ───
 
     MAX_SEARCH_ROUNDS = 4  # hard limit: force output after this many searches
+
+    async def _replan_subtask(self, dag: TaskDAG, subtask, failed_result: SubtaskResult):
+        """Generate a replacement subtask when the original fails after max retries."""
+        try:
+            replan_prompt = (
+                f"Original task: {dag.original_query}\n"
+                f"Failed subtask: {subtask.prompt}\n"
+                f"Error: {failed_result.error or 'no output produced'}\n"
+                f"Retry history: {failed_result.retry_history}\n\n"
+                "The agent above failed. Generate a NEW approach with a different strategy, tool set, or angle. "
+                "Output JSON: {\"name\": \"agent_name\", \"role\": \"role\", "
+                "\"system_prompt\": \"...\", \"tools\": [\"tool1\"], \"prompt\": \"new task prompt\"}"
+            )
+            resp = await self.llm.chat.completions.create(
+                model=self.judge_model,
+                messages=[{"role": "user", "content": replan_prompt}],
+                temperature=0.5,
+            )
+            raw = resp.choices[0].message.content or ""
+            parsed = json.loads(raw.strip().removeprefix("```json").removesuffix("```").strip())
+            return Subtask(
+                id=subtask.id,
+                agent_config=AgentConfig(
+                    name=parsed.get("name", f"replan_{subtask.id}"),
+                    role=parsed.get("role", subtask.agent_config.role),
+                    system_prompt=parsed.get("system_prompt", subtask.agent_config.system_prompt),
+                    tools=parsed.get("tools", subtask.agent_config.tools),
+                    max_iterations=subtask.agent_config.max_iterations,
+                ),
+                prompt=parsed.get("prompt", subtask.prompt),
+                depends_on=subtask.depends_on,
+            )
+        except Exception:
+            return None
 
     async def _run_single_agent(
         self, subtask_id: str, agent: Agent, prompt: str, context: str = ""
