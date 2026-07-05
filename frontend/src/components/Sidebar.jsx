@@ -19,12 +19,16 @@ export default function Sidebar() {
   }
 
   const switchConv = async (id) => {
+    if (state.activeConvId === id) return  // already active
     dispatch({ type: 'SET_ACTIVE', payload: id })
+    // Only reset task state, never reload messages that are already in memory
     dispatch({ type: 'RESET_TASK' })
-    if (!state.conversations[id]._loaded) {
-      const r = await fetch('/api/conversations/' + id)
-      const d = await r.json()
-      dispatch({ type: 'SET_MSGS', payload: { id, messages: (d.messages || []).map(m => ({ role: m.role, content: m.content })) } })
+    if (!state.conversations[id]?._loaded) {
+      try {
+        const r = await fetch('/api/conversations/' + id)
+        const d = await r.json()
+        dispatch({ type: 'SET_MSGS', payload: { id, messages: (d.messages || []).map(m => ({ role: m.role, content: m.content })) } })
+      } catch(e) {}
     }
   }
 
