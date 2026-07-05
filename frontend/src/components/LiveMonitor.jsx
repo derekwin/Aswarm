@@ -94,9 +94,32 @@ export default function LiveMonitor() {
                     <div className="monitor-detail-header">
                       <button className="monitor-back-btn" onClick={() => setDetailAgent(null)}>← Back</button>
                       <h3>{detailAgent.name}</h3>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{detailAgent.state}</span>
+                      <span style={{ fontSize: '0.7rem', color: detailAgent.state === 'completed' ? 'var(--green)' : detailAgent.state === 'failed' ? 'var(--red)' : 'var(--accent)' }}>{detailAgent.state + (detailAgent.retry ? ' · ' + detailAgent.retry + ' retries' : '')}</span>
                     </div>
-                    <div className="monitor-detail-content" dangerouslySetInnerHTML={{ __html: mdRender((detailAgent.output || '') + (detailAgent.error ? '\n[ERROR: ' + detailAgent.error + ']' : '') + (detailAgent.retry ? '\nRetries: ' + detailAgent.retry : '')) }} />
+                    <div className="monitor-detail-content">
+                      {/* Activity log for this agent */}
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Activity</div>
+                        {(conv?.activity || []).filter(act => act.agent === detailAgent.name).length === 0 && <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>No activity recorded</div>}
+                        {(conv?.activity || []).filter(act => act.agent === detailAgent.name).map((act, j) => (
+                          <div key={j} style={{ padding: '4px 0', borderBottom: '1px solid var(--border)', fontSize: '0.7rem' }}>
+                            <span style={{ color: 'var(--accent)', marginRight: 4 }}>{({ search_engine: '🔍', webfetch: '🌐', python_executor: '🐍', file_writer: '📝', shell: '💻', browser: '🖥' })[act.tool] || '🔧'}</span>
+                            <span style={{ fontWeight: 500 }}>{act.tool}</span>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem', marginTop: 2, wordBreak: 'break-all' }}>{act.args}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Output */}
+                      {detailAgent.output && (
+                        <div>
+                          <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Output</div>
+                          <div dangerouslySetInnerHTML={{ __html: mdRender(detailAgent.output) }} />
+                        </div>
+                      )}
+                      {detailAgent.error && (
+                        <div style={{ marginTop: 8, color: 'var(--red)', fontSize: '0.7rem' }}>[ERROR] {detailAgent.error}</div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

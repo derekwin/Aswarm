@@ -302,7 +302,7 @@ async def _execute_task(task_id: str, conv_id: str, query: str):
             _push_event(task_id, {
                 "type": "agent_done", "subtask_id": subtask_id,
                 "state": result.state.value,
-                "output": (result.output or "")[:500],
+                "output": (result.output or ""),
                 "error": result.error, "retry_count": result.retry_count,
             })
             return result
