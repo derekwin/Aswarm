@@ -170,7 +170,7 @@ function DAGView({ data }) {
         let mm = 'graph LR\n'
         const colors = ['#6c5ce7', '#00d26a', '#f5a623', '#f93a3a']
         data.parallel_groups?.forEach((g, gi) => {
-          mm += `  subgraph G${gi + 1}[Group ${gi + 1}]\n    style G${gi + 1} fill:#1a1a1a,stroke:${colors[gi % 4]}\n`
+          mm += `  subgraph G${gi + 1}[Group ${gi + 1}]\n    style G${gi + 1} fill:#1e1e24,stroke:${colors[gi % 4]}\n`
           g.forEach(tid => { const s = data.subtasks?.find(x => x.id === tid) || {}; mm += `    ${tid}["${(s.name || tid).replace(/[\[\]{}()"'`#&;:<>\\]/g, '').replace(/_/g, ' ').slice(0, 18).trim() || 'Agent'}"]\n` })
           mm += '  end\n'
         })
