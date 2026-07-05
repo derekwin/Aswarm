@@ -10,24 +10,28 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
 .step-dot { transition: all 0.2s ease; }
 .step-running .step-dot { animation: pulse-dot 1.2s infinite; }
 @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
-.step-detail { display: none; }
-.step-detail.show { display: block; }
+.step-detail { display: none; } .step-detail.show { display: block; }
 .typing::after { content: '...'; animation: dots 1.5s steps(3, end) infinite; }
 @keyframes dots { 0%,20% { content: ''; } 40% { content: '.'; } 60% { content: '..'; } 80%,100% { content: '...'; } }
 .fade-up { animation: fadeUp 0.35s ease; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #262626; border-radius: 4px; }
+.sidebar-open .sidebar-overlay { display: block; }
+@media (min-width: 768px) { .sidebar-overlay { display: none !important; } }
 </style>
 </head>
 <body class="bg-[#0d0d0d] text-[#ececec] h-screen flex overflow-hidden">
 
+<!-- Sidebar overlay for mobile -->
+<div class="sidebar-overlay hidden fixed inset-0 bg-black/60 z-20 md:hidden" onclick="toggleSidebar()"></div>
+
 <!-- Sidebar -->
-<aside class="w-64 lg:w-72 bg-[#0a0a0a] border-r border-border flex flex-col flex-shrink-0 hidden md:flex">
+<aside id="sidebar" class="w-72 bg-[#0a0a0a] border-r border-border flex flex-col flex-shrink-0 fixed md:static inset-y-0 left-0 z-30 transform -translate-x-full md:translate-x-0 transition-transform duration-300">
   <div class="p-5 flex items-center gap-3 border-b border-border">
-    <div class="w-7 h-7 bg-gradient-to-br from-accent to-[#a78bfa] rounded-lg flex items-center justify-center text-sm">⚡</div>
-    <h2 class="text-base font-bold tracking-tight">AgentSwarm</h2>
+    <div class="w-7 h-7 bg-gradient-to-br from-accent to-[#a78bfa] rounded-lg flex items-center justify-center text-sm flex-shrink-0">⚡</div>
+    <h2 class="text-base font-bold tracking-tight truncate">AgentSwarm</h2>
   </div>
-  <button onclick="newConversation()" class="mx-3 mt-3 px-4 py-2.5 rounded-xl border border-border bg-surface hover:border-accent hover:bg-[rgba(108,92,231,0.08)] text-sm transition flex items-center gap-2">
+  <button onclick="newConversation(); if(window.innerWidth<768)toggleSidebar()" class="mx-3 mt-3 px-4 py-2.5 rounded-xl border border-border bg-surface hover:border-accent hover:bg-[rgba(108,92,231,0.08)] text-sm transition flex items-center gap-2">
     <span class="text-lg leading-none">+</span> New Task
   </button>
   <div id="convList" class="flex-1 overflow-y-auto p-2">
@@ -37,37 +41,48 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
 
 <!-- Main -->
 <main class="flex-1 flex flex-col min-w-0">
-  <header class="px-5 lg:px-7 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
-    <h3 id="convTitle" class="text-sm font-semibold tracking-tight">New Task</h3>
-    <span class="text-xs px-3 py-1.5 bg-surface border border-border rounded-full text-[#999]">qwen3.5:35b</span>
+  <header class="px-4 sm:px-5 lg:px-7 py-3 sm:py-4 border-b border-border flex items-center justify-between flex-shrink-0">
+    <div class="flex items-center gap-3">
+      <button onclick="toggleSidebar()" class="md:hidden p-1.5 -ml-1 rounded-lg hover:bg-surface transition">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h14M3 10h14M3 15h14"/></svg>
+      </button>
+      <h3 id="convTitle" class="text-sm font-semibold tracking-tight">New Task</h3>
+    </div>
+    <span class="text-[10px] sm:text-xs px-2 sm:px-3 py-1 sm:py-1.5 bg-surface border border-border rounded-full text-[#999] hidden sm:inline">qwen3.5:35b</span>
   </header>
 
-  <div id="chatArea" class="flex-1 overflow-y-auto px-5 lg:px-7 py-8 flex flex-col gap-7">
-    <div class="flex flex-col items-center justify-center flex-1 gap-5" id="emptyState">
-      <div class="w-14 h-14 bg-[rgba(108,92,231,0.12)] rounded-full flex items-center justify-center text-2xl">✦</div>
-      <h2 class="text-xl font-semibold tracking-tight">What do you want to research?</h2>
-      <p class="text-[#999] text-sm max-w-md text-center leading-relaxed">Describe your task. AgentSwarm decomposes it, spawns specialized agents, and executes them in parallel.</p>
-      <div class="flex gap-2 flex-wrap justify-center">
-        <button onclick="suggest('调研2025年国产AI芯片市场并生成分析报告')" class="px-4 py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[#999] text-xs transition">国产芯片市场调研</button>
-        <button onclick="suggest('对比分析 React 和 Vue 在2025年的生态和发展趋势')" class="px-4 py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[#999] text-xs transition">React vs Vue 趋势</button>
-        <button onclick="suggest('写一篇关于大语言模型发展的技术报告')" class="px-4 py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[#999] text-xs transition">LLM技术报告</button>
+  <div id="chatArea" class="flex-1 overflow-y-auto px-4 sm:px-5 lg:px-7 py-6 sm:py-8 flex flex-col gap-5 sm:gap-7">
+    <div class="flex flex-col items-center justify-center flex-1 gap-4 sm:gap-5" id="emptyState">
+      <div class="w-12 h-12 sm:w-14 sm:h-14 bg-[rgba(108,92,231,0.12)] rounded-full flex items-center justify-center text-xl sm:text-2xl">✦</div>
+      <h2 class="text-lg sm:text-xl font-semibold tracking-tight text-center">What do you want to research?</h2>
+      <p class="text-[#999] text-xs sm:text-sm max-w-xs sm:max-w-md text-center leading-relaxed px-2">Describe your task. AgentSwarm decomposes it, spawns specialized agents, and executes them in parallel.</p>
+      <div class="flex gap-2 flex-wrap justify-center px-2">
+        <button onclick="suggest('调研2025年国产AI芯片市场并生成分析报告')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[#999] text-[11px] sm:text-xs transition">国产芯片市场调研</button>
+        <button onclick="suggest('对比分析 React 和 Vue 在2025年的生态和发展趋势')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[#999] text-[11px] sm:text-xs transition">React vs Vue</button>
+        <button onclick="suggest('写一篇关于大语言模型发展的技术报告')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[#999] text-[11px] sm:text-xs transition">LLM技术报告</button>
       </div>
     </div>
   </div>
 
-  <div class="px-5 lg:px-7 py-4 border-t border-border flex-shrink-0">
-    <div class="flex gap-3 max-w-3xl mx-auto items-end">
+  <div class="px-3 sm:px-5 lg:px-7 py-3 sm:py-4 border-t border-border flex-shrink-0">
+    <div class="flex gap-2 sm:gap-3 max-w-3xl mx-auto items-end">
       <textarea id="queryInput" placeholder="Describe your task..." rows="1"
-        class="flex-1 px-4 py-3.5 bg-surface border border-border rounded-2xl text-[#ececec] text-sm resize-none min-h-[48px] max-h-[140px] leading-relaxed focus:outline-none focus:border-accent focus:ring-4 focus:ring-[rgba(108,92,231,0.12)] transition"
+        class="flex-1 px-3 sm:px-4 py-3 sm:py-3.5 bg-surface border border-border rounded-xl sm:rounded-2xl text-[#ececec] text-sm resize-none min-h-[44px] sm:min-h-[48px] max-h-[120px] sm:max-h-[140px] leading-relaxed focus:outline-none focus:border-accent focus:ring-2 sm:focus:ring-4 focus:ring-[rgba(108,92,231,0.12)] transition"
         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitTask()}"></textarea>
       <button id="submitBtn" onclick="submitTask()"
-        class="px-6 py-3.5 bg-accent hover:brightness-110 rounded-2xl text-white font-semibold text-sm transition flex-shrink-0 h-[48px] disabled:opacity-30 disabled:cursor-not-allowed">Send</button>
+        class="px-4 sm:px-6 py-3 sm:py-3.5 bg-accent hover:brightness-110 rounded-xl sm:rounded-2xl text-white font-semibold text-sm transition flex-shrink-0 h-[44px] sm:h-[48px] disabled:opacity-30 disabled:cursor-not-allowed">Send</button>
     </div>
   </div>
 </main>
 
 <script>
 let conversations = {}, activeConvId = null, eventSource = null, agentStates = {};
+
+function toggleSidebar() {
+  var s = document.getElementById('sidebar');
+  s.classList.toggle('-translate-x-full');
+  document.body.classList.toggle('sidebar-open');
+}
 
 function loadMermaid(cb) {
   if (window.mermaid) return cb();
