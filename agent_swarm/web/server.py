@@ -16,6 +16,7 @@ from agent_swarm import (
     MCPGateway, StateManager, TaskDAG, SwarmState,
 )
 from agent_swarm.web.storage import get_storage
+from agent_swarm.trace import trace
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -268,6 +269,8 @@ async def _execute_task(task_id: str, conv_id: str, query: str):
 
         _push_event(task_id, {"type": "status", "msg": "Decomposing task..."})
         dag: TaskDAG = await scheduler.decompose(query, "multi")
+
+        trace.record("dag_generated", task_id, data={"subtasks": len(dag.subtasks), "groups": len(dag.parallel_groups)})
         storage.update_task(task_id, "running", dag.intent, len(dag.subtasks))
         storage.update_conversation_title(conv_id, query[:40])
 
@@ -285,11 +288,14 @@ async def _execute_task(task_id: str, conv_id: str, query: str):
         original_run = orchestrator._run_single_agent
 
         async def hooked_run(subtask_id, agent, prompt, context=""):
+            trace.record("agent_start", task_id, subtask_id=subtask_id, agent_name=agent.name)
             _push_event(task_id, {
                 "type": "agent_start", "subtask_id": subtask_id,
                 "agent_name": agent.name, "role": agent.role,
             })
             result = await original_run(subtask_id, agent, prompt, context)
+            trace.record("agent_done", task_id, subtask_id=subtask_id, agent_name=agent.name,
+                         data={"state": result.state.value, "iterations": result.iterations_used, "retries": result.retry_count})
             storage.add_agent_result(
                 task_id, subtask_id, agent.name,
                 result.state.value, result.output, result.error, result.retry_count,
@@ -309,6 +315,7 @@ async def _execute_task(task_id: str, conv_id: str, query: str):
         async def hooked_handle(agent, tool_calls, messages):
             for tc in (tool_calls or []):
                 func_name = tc.function.name
+                trace.record("tool_call", task_id, agent_name=agent.name, data={"tool": func_name})
                 try:
                     func_args = json.loads(tc.function.arguments)
                     arg_preview = json.dumps(func_args, ensure_ascii=False)[:200]
@@ -337,9 +344,13 @@ async def _execute_task(task_id: str, conv_id: str, query: str):
         _push_event(task_id, {
             "type": "done", "summary": summary, "results": results,
         })
+        trace.record("task_complete", task_id, data={"results": len(results)})
+        trace.flush(task_id)
 
     except Exception as e:
         logger.exception(f"Task {task_id} failed")
+        trace.record("task_error", task_id, data={"error": str(e)})
+        trace.flush(task_id)
         storage.update_task(task_id, "failed")
         _push_event(task_id, {"type": "error", "msg": str(e)})
 
