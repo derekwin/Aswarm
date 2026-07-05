@@ -418,10 +418,22 @@ button, .conv-item, .step, .monitor-agent-card, .cmd-result, .suggestion-chip { 
 
 /* ── Edit / Re-run ── */
 .user-bubble-wrapper { position: relative; }
-.user-bubble-wrapper:hover .bubble-actions { opacity: 1; }
 .bubble-actions {
-  position: absolute; top: -8px; right: 0; display: flex; gap: 4px;
-  opacity: 0; transition: opacity 0.15s;
+  position: absolute; bottom: -8px; right: 4px; display: flex; gap: 4px;
+  opacity: 0; transition: opacity 0.2s; z-index: 1;
+}
+.user-bubble-wrapper:hover .bubble-actions { opacity: 1; }
+.bubble-actions.visible { opacity: 1; }
+.bubble-action-btn {
+  padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface); cursor: pointer; font-size: 0.7rem;
+  color: var(--text-secondary); font-family: inherit; transition: all 0.12s;
+  box-shadow: var(--shadow-sm);
+}
+.bubble-action-btn:hover { border-color: var(--accent); color: var(--text); }
+@media (hover: none) {
+  .bubble-actions { opacity: 0; }
+  .bubble-actions.visible { opacity: 1; }
 }
 .bubble-action-btn {
   padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border);

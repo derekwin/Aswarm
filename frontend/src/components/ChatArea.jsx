@@ -86,7 +86,10 @@ export default function ChatArea() {
               </div>
             )}
             {m.role === 'user' && editingIdx !== i && (
-              <div className="bubble-actions">
+              <div className={'bubble-actions' + ((m._showActions) ? ' visible' : '')}
+                   onTouchStart={(e) => { m._touchTimer = setTimeout(() => { m._showActions = true; e.currentTarget.classList.add('visible') }, 500) }}
+                   onTouchEnd={() => { clearTimeout(m._touchTimer) }}
+                   onTouchMove={() => { clearTimeout(m._touchTimer) }}>
                 <button className="bubble-action-btn" onClick={() => startEdit(i, m.content)}>✎ {t('edit')}</button>
               </div>
             )}
