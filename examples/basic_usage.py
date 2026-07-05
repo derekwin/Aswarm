@@ -1,80 +1,60 @@
-"""AgentSwarm 基础使用示例。
+"""AgentSwarm usage example.
 
-使用前确保:
-1. 本地已启动 Ollama: ollama serve
-2. 已拉取模型: ollama pull qwen3:4b && ollama pull qwen3.5:35b
-3. 建议至少 24GB 显存/内存用于 35B 模型
-
-演示: 项目上下文感知 — 检测到无关任务时提醒用户创建独立项目目录。
+Prerequisites:
+1. Ollama running: ollama serve
+2. Models pulled: ollama pull qwen3:4b && ollama pull qwen3.5:35b
+3. 24GB+ VRAM/RAM recommended for 35B model
 """
 
 import asyncio
 import logging
 from agent_swarm import (
-    MetaScheduler,
-    SwarmOrchestrator,
-    AgentFactory,
-    MCPGateway,
-    StateManager,
+    MetaScheduler, SwarmOrchestrator, AgentFactory, MCPGateway, StateManager,
 )
+from agent_swarm.infrastructure.llm_client import LLMClient
+from agent_swarm.infrastructure.tool_registry import ToolRegistry
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 async def main():
-    # ── 初始化 ──
+    # Infrastructure
+    llm = LLMClient(base_url="http://localhost:11434/v1", api_key="ollama")
+    tools = ToolRegistry()
     gateway = MCPGateway()
     factory = AgentFactory(gateway=gateway, default_model="qwen3.5:35b")
     state_manager = StateManager()
 
-    scheduler = MetaScheduler(
-        base_url="http://localhost:11434/v1",
-        api_key="ollama",
-        decomposer_model="qwen3.5:35b",
-    )
-
+    scheduler = MetaScheduler(llm=llm, decomposer_model="qwen3.5:35b")
     orchestrator = SwarmOrchestrator(
-        gateway=gateway,
-        factory=factory,
-        state_manager=state_manager,
-        llm_base_url="http://localhost:11434/v1",
-        llm_api_key="ollama",
+        tools=tools, factory=factory, state_manager=state_manager, llm=llm,
         max_subtask_retries=2,
     )
 
-    # ── 设置项目上下文 ──
-    scheduler.set_project("AgentSwarm 本地 Agent 集群系统开发")
+    scheduler.set_project("AgentSwarm agent cluster development")
 
-    # ── 执行任务 ──
-    query = "调研2025年国产AI芯片市场并生成分析报告"
-
-    # 发散检查：新任务是否偏离当前项目？
+    query = "Research 2025 China AI chip market and generate analysis report"
     warning = scheduler.check_if_divergent(query)
     if warning and warning.diverged:
-        print(f"\n⚠️  Current project: {warning.current_project}")
-        print(f"   New task: {warning.new_task_summary}")
-        print(f"   {warning.suggestion}")
-        print()
+        print(f"\nCurrent project: {warning.current_project}")
+        print(f"New task: {warning.new_task_summary}")
+        print(f"{warning.suggestion}\n")
 
     logger.info(f"Processing: {query}")
 
-    dag = await scheduler.process(query)
-    logger.info(f"Intent: {dag.intent}")
-    logger.info(f"Subtask count: {len(dag.subtasks)}")
-    logger.info(f"Parallel groups: {dag.parallel_groups}")
+    dag = await scheduler.decompose(query)
+    logger.info(f"Intent: {dag.intent}, Subtasks: {len(dag.subtasks)}, Groups: {dag.parallel_groups}")
 
     for subtask in dag.subtasks:
         ac = subtask.agent_config
         logger.info(f"  [{subtask.id}] {ac.name} ({ac.role}): {ac.tools}")
 
     state = await orchestrator.execute(dag)
-
     results = list(state.subtask_results.values())
-    summary = orchestrator.aggregator.aggregate(results)
 
     print("\n" + "=" * 60)
-    print(summary)
+    print(orchestrator.aggregator.aggregate(results))
     print("=" * 60)
 
     completed = sum(1 for r in results if r.state.value == "completed")
