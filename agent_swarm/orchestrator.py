@@ -50,11 +50,7 @@ class ResultAggregator:
 
 
 class SwarmOrchestrator:
-    """集群编排器: 按 parallel_groups 逐组并行执行子任务。
-
-    每个 Agent 通过 LLM (OpenAI 兼容 API) 执行推理和工具调用。
-    每完成一个 parallel_group，自动 checkpoint 状态。
-    """
+    MAX_SEARCH_ROUNDS = 4
 
     def __init__(
         self,
