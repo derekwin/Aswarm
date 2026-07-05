@@ -99,13 +99,9 @@ class ToolRegistry:
     def _shell(command: str, **kw) -> str:
         ws = os.environ.get("AGENTSWARM_WORKSPACE", "/tmp/agent_swarm")
         os.makedirs(ws, exist_ok=True)
-        try:
-            r = subprocess.run(["sh", "-c", command], capture_output=True, text=True, timeout=kw.get("timeout", 30), cwd=ws)
-            return f"STDOUT:\n{r.stdout}\nSTDERR:\n{r.stderr}"
-        except subprocess.TimeoutExpired:
-            return "Command timed out"
-        except Exception as e:
-            return f"Error: {e}"
+        stdout, stderr, ok = _sandbox_run(["sh", "-c", command], ws, kw.get("timeout", 30))
+        prefix = "[SANDBOX] " if ok else "[SANDBOX FAILED] "
+        return f"{prefix}STDOUT:\n{stdout}\nSTDERR:\n{stderr}"
 
     @staticmethod
     def _python(code: str, **kw) -> str:
@@ -115,12 +111,9 @@ class ToolRegistry:
             f.write(code)
             fp = f.name
         try:
-            r = subprocess.run(["python3", fp], capture_output=True, text=True, timeout=kw.get("timeout", 60))
-            return f"STDOUT:\n{r.stdout}\nSTDERR:\n{r.stderr}"
-        except subprocess.TimeoutExpired:
-            return "Code execution timed out"
-        except Exception as e:
-            return f"Error: {e}"
+            stdout, stderr, ok = _sandbox_run(["python3", fp], ws, kw.get("timeout", 60))
+            prefix = "[SANDBOX] " if ok else "[SANDBOX FAILED] "
+            return f"{prefix}STDOUT:\n{stdout}\nSTDERR:\n{stderr}"
         finally:
             os.unlink(fp)
 
@@ -246,3 +239,28 @@ def _clean_url(raw: str) -> str:
         if target.startswith("http"):
             return target
     return urlunparse((p.scheme, p.netloc, p.path, "", "", ""))
+
+
+def _sandbox_run(cmd: list, ws: str, timeout: int) -> tuple[str, str, bool]:
+    """Execute in Sandlock if available, fall back to subprocess."""
+    try:
+        from sandlock import Sandbox
+        sandbox = Sandbox(fs_writable=[ws], fs_readable=["/usr", "/lib", "/lib64", "/etc", "/bin", "/tmp"],
+                          max_memory="512M", max_processes=10, clean_env=True)
+        result = sandbox.run(cmd, timeout=timeout)
+        return result.stdout.decode(errors="replace"), result.stderr.decode(errors="replace"), result.success
+    except ImportError:
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=ws)
+            return r.stdout, r.stderr, r.returncode == 0
+        except subprocess.TimeoutExpired:
+            return "", "Timed out", False
+        except Exception as e:
+            return "", str(e), False
+    except Exception as e:
+        logger.warning(f"Sandbox failed, falling back: {e}")
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=ws)
+            return r.stdout, r.stderr, r.returncode == 0
+        except Exception:
+            return "", str(e), False
