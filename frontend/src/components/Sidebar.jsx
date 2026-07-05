@@ -42,10 +42,10 @@ export default function Sidebar() {
           <div className="logo">⚡</div>
           <h2>AgentSwarm</h2>
         </div>
-        <button className="new-conv-btn" onClick={newConv}>+ {t('newTask')}</button>
         <div className="conv-search">
           <input type="text" placeholder={t('searchConv')} value={filter} onChange={e => setFilter(e.target.value)} />
         </div>
+        <button className="new-conv-btn" onClick={newConv}>+ {t('newTask')}</button>
         <div className="conv-list">
           {ids.length === 0 && <div className="empty-conv">{t('noConvs')}</div>}
           {ids.map(id => {

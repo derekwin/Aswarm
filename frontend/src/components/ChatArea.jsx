@@ -32,7 +32,7 @@ export default function ChatArea() {
             const r=await fetch('/api/conversations?title=New+Task',{method:'POST'})
             const c=await r.json()
             dispatch({type:'ADD_CONV',payload:{id:c.id,title:c.title,messages:[],time:new Date(c.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),_loaded:true,agents:{},totalAgents:0,completedAgents:0}})
-          }} style={{padding:'12px 28px',fontSize:'0.9rem'}}>Start a New Task</button>
+          }} style={{padding:'12px 28px',fontSize:'0.9rem'}}>{t('startTask')}</button>
         </div>
       </div>
     )}
@@ -71,8 +71,8 @@ export default function ChatArea() {
                   onKeyDown={e => { if (e.key === 'Escape') cancelEdit(); if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') submitEdit() }}
                 />
                 <div className="edit-actions">
-                  <button className="save-btn" onClick={submitEdit}>Re-run</button>
-                  <button className="cancel-btn" onClick={cancelEdit}>Cancel</button>
+                  <button className="save-btn" onClick={submitEdit}>{t('rerun')}</button>
+                  <button className="cancel-btn" onClick={cancelEdit}>{t('cancel')}</button>
                 </div>
               </div>
             ) : (
@@ -90,7 +90,7 @@ export default function ChatArea() {
             )}
             {m.role === 'user' && editingIdx !== i && (
               <div className="bubble-actions">
-                <button className="bubble-action-btn" onClick={() => startEdit(i, m.content)}>✎ Edit</button>
+                <button className="bubble-action-btn" onClick={() => startEdit(i, m.content)}>✎ {t('edit')}</button>
               </div>
             )}
           </div>
@@ -163,7 +163,7 @@ function InlineAgentDots() {
           </div>
         ))}
       </div>
-      {!state.monitorOpen && <div className="view-monitor-btn" onClick={() => dispatch({ type: 'SET_MONITOR', payload: true })}>View in Monitor →</div>}
+      {!state.monitorOpen && <div className="view-monitor-btn" onClick={() => dispatch({ type: 'SET_MONITOR', payload: true })}>{t('viewMonitor')} →</div>}
     </div>
   )
 }

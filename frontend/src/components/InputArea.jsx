@@ -38,7 +38,7 @@ export default function InputArea() {
       <textarea id="queryInput" ref={taRef} value={query} onChange={e=>{setQuery(e.target.value);autoResize()}} onInput={autoResize} placeholder={t('taskPlaceholder')} rows={1}
         onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submit()}}}/>
       {isRunning ? (
-        <button className="stop-btn" onClick={cancelTask}>Stop</button>
+        <button className="stop-btn" onClick={cancelTask}>{t('stop')}</button>
       ) : (
         <button onClick={submit} disabled={sending}>{t('send')}</button>
       )}

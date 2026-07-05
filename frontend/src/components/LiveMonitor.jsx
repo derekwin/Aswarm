@@ -2,7 +2,7 @@ import { useApp } from '../App'
 import { useState, useEffect, useRef, useCallback } from 'react'
 
 export default function LiveMonitor() {
-  const { state, dispatch, setMonitorWidth } = useApp()
+  const { state, dispatch, setMonitorWidth, t } = useApp()
   const [tab, setTab] = useState('agents')
   const [files, setFiles] = useState([])
   const [viewFile, setViewFile] = useState(null)
@@ -46,14 +46,14 @@ export default function LiveMonitor() {
 
   return (
     <>
-      <div className={'monitor-collapse-line' + (collapsed ? ' show' : '')} onClick={toggleCollapse} title="Open Monitor" />
+      <div className={'monitor-collapse-line' + (collapsed ? ' show' : '')} onClick={toggleCollapse} title={t('openMonitor')} />
       <div className={'live-monitor' + (collapsed ? ' collapsed' : '')} style={{ width: collapsed ? 6 : width }}>
         {!collapsed && <div className="monitor-resize-handle" ref={handleRef} onMouseDown={onMouseDown} />}
         <div className="monitor-toggle-collapse" onClick={toggleCollapse} style={{ left: -16 }}>▶</div>
         {collapsed ? null : (
           <div className="monitor-inner" style={{ width }}>
             <div className="monitor-header">
-              <h3>Monitor</h3>
+              <h3>{t('monitor')}</h3>
               <span className="monitor-summary">{totalAgents > 0 ? completedAgents + '/' + totalAgents : ''}</span>
             </div>
             <div className={'monitor-progress' + (totalAgents > 0 ? ' active' : '')}><div className="monitor-progress-fill" style={{ width: pct + '%' }} /></div>
@@ -61,14 +61,14 @@ export default function LiveMonitor() {
               {['agents', 'files'].map(t => (
                 <button key={t} onClick={() => setTab(t)}
                   style={{ flex: 1, padding: '8px', border: 'none', background: tab === t ? 'var(--surface)' : 'none', color: tab === t ? 'var(--text)' : 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 500, borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent', transition: 'all 0.15s' }}>
-                  {t === 'agents' ? 'Agents' : 'Files'}
+                  {t === 'agents' ? t('agents') : t('files')}
                 </button>
               ))}
             </div>
             {tab === 'agents' ? (
               <div className="monitor-agents" style={{ position: 'relative', overflow: 'hidden' }}>
                 {conv?.dag && <DAGView data={conv.dag} />}
-                {agents.length === 0 && !conv?.dag && <div className="empty-conv" style={{ padding: 16 }}>Waiting for task...</div>}
+                {agents.length === 0 && !conv?.dag && <div className="empty-conv" style={{ padding: 16 }}>{t('waiting')}</div>}
                 {agents.map((a, i) => (
                   <div key={a.name + i}>
                     <div className={'monitor-agent-card ' + a.state} onClick={() => setDetailAgent({ ...a, name: a.name || 'Agent-' + i })}>
@@ -79,7 +79,7 @@ export default function LiveMonitor() {
                         <div className="monitor-agent-name">{a.name || 'Agent'}</div>
                         <div className="monitor-agent-action">{a.state + (a.retry ? ' · ' + a.retry + ' retries' : '')}</div>
                       </div>
-                      <button className="activity-expand-btn" onClick={e => { e.stopPropagation(); setExpandedActivity(expandedActivity === a.name ? null : a.name) }}>Log</button>
+                      <button className="activity-expand-btn" onClick={e => { e.stopPropagation(); setExpandedActivity(expandedActivity === a.name ? null : a.name) }}>{t('log')}</button>
                     </div>
                     {expandedActivity === a.name && (conv?.activity || []).filter(act => act.agent === a.name).map((act, j) => (
                       <div key={j} style={{ padding: '2px 8px 2px 36px', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
@@ -92,15 +92,15 @@ export default function LiveMonitor() {
                 {detailAgent && (
                   <div className="monitor-detail open">
                     <div className="monitor-detail-header">
-                      <button className="monitor-back-btn" onClick={() => setDetailAgent(null)}>← Back</button>
+                      <button className="monitor-back-btn" onClick={() => setDetailAgent(null)}>← {t('back')}</button>
                       <h3>{detailAgent.name}</h3>
                       <span style={{ fontSize: '0.7rem', color: detailAgent.state === 'completed' ? 'var(--green)' : detailAgent.state === 'failed' ? 'var(--red)' : 'var(--accent)' }}>{detailAgent.state + (detailAgent.retry ? ' · ' + detailAgent.retry + ' retries' : '')}</span>
                     </div>
                     <div className="monitor-detail-content">
                       {/* Activity log for this agent */}
                       <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Activity</div>
-                        {(conv?.activity || []).filter(act => act.agent === detailAgent.name).length === 0 && <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>No activity recorded</div>}
+                        <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('activity')}</div>
+                        {(conv?.activity || []).filter(act => act.agent === detailAgent.name).length === 0 && <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>{t('noActivity')}</div>}
                         {(conv?.activity || []).filter(act => act.agent === detailAgent.name).map((act, j) => (
                           <div key={j} style={{ padding: '4px 0', borderBottom: '1px solid var(--border)', fontSize: '0.7rem' }}>
                             <span style={{ color: 'var(--accent)', marginRight: 4 }}>{({ search_engine: '🔍', webfetch: '🌐', python_executor: '🐍', file_writer: '📝', shell: '💻', browser: '🖥' })[act.tool] || '🔧'}</span>
@@ -112,7 +112,7 @@ export default function LiveMonitor() {
                       {/* Output */}
                       {detailAgent.output && (
                         <div>
-                          <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Output</div>
+                          <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('output')}</div>
                           <div dangerouslySetInnerHTML={{ __html: mdRender(detailAgent.output) }} />
                         </div>
                       )}
@@ -125,7 +125,7 @@ export default function LiveMonitor() {
               </div>
             ) : (
               <div className="monitor-agents">
-                {files.length === 0 && <div className="empty-conv" style={{ padding: 16 }}>No files yet</div>}
+                {files.length === 0 && <div className="empty-conv" style={{ padding: 16 }}>{t('noFiles')}</div>}
                 {files.map(f => (
                   <div key={f.path} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: '0.7rem', color: 'var(--text-secondary)', transition: 'background 0.1s' }}
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--hover-row)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}
@@ -148,7 +148,7 @@ export default function LiveMonitor() {
             <div className="modal-header">
               <h2 style={{ fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{viewFile.path}</h2>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => downloadFile(viewFile.path)} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.75rem' }}>⬇ Download</button>
+                <button onClick={() => downloadFile(viewFile.path)} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.75rem' }}>⬇ {t('download')}</button>
                 <button className="modal-close" onClick={() => setViewFile(null)}>✕</button>
               </div>
             </div>
