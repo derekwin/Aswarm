@@ -93,6 +93,8 @@ async def list_conversations():
 async def create_conversation(title: str = Query(default="New Task")):
     conv_id = f"conv_{id(title)}_{len(storage.list_conversations())}"
     conv = storage.create_conversation(conv_id, title)
+    # Create workspace immediately, aligned with DB
+    (WORKSPACE_ROOT / conv_id).mkdir(parents=True, exist_ok=True)
     return conv
 
 
@@ -108,11 +110,37 @@ async def get_conversation(conv_id: str):
 @app.delete("/api/conversations/{conv_id}")
 async def delete_conversation(conv_id: str):
     storage.delete_conversation(conv_id)
-    # Clean up workspace
     ws = WORKSPACE_ROOT / conv_id
     if ws.exists():
         shutil.rmtree(ws)
     return {"ok": True}
+
+
+# ── Maintenance / Sync ──
+
+@app.post("/api/sync")
+async def sync_workspaces():
+    """Align workspace directories with database conversations."""
+    convs = storage.list_conversations()
+    db_ids = {c["id"] for c in convs}
+    
+    # Ensure all DB conversations have workspace dirs
+    created = 0
+    for c in convs:
+        ws = WORKSPACE_ROOT / c["id"]
+        if not ws.exists():
+            ws.mkdir(parents=True, exist_ok=True)
+            created += 1
+
+    # Clean orphaned workspace dirs (no matching DB record)
+    removed = 0
+    if WORKSPACE_ROOT.exists():
+        for d in WORKSPACE_ROOT.iterdir():
+            if d.is_dir() and d.name not in db_ids:
+                shutil.rmtree(d)
+                removed += 1
+
+    return {"created": created, "removed": removed, "total": len(convs)}
 
 
 # ── Workspace API ──
@@ -219,9 +247,7 @@ async def _event_stream_empty():
 async def _execute_task(task_id: str, conv_id: str, query: str):
     try:
         settings = _load_settings()
-        # Ensure workspace directory exists
         ws = WORKSPACE_ROOT / conv_id
-        ws.mkdir(parents=True, exist_ok=True)
         os.environ["AGENTSWARM_WORKSPACE"] = str(ws)
 
         gateway = MCPGateway()
@@ -324,4 +350,14 @@ async def _execute_task(task_id: str, conv_id: str, query: str):
 
 if __name__ == "__main__":
     import uvicorn
+    # Sync on startup
+    convs = storage.list_conversations()
+    for c in convs:
+        (WORKSPACE_ROOT / c["id"]).mkdir(parents=True, exist_ok=True)
+    # Clean orphans
+    if WORKSPACE_ROOT.exists():
+        db_ids = {c["id"] for c in convs}
+        for d in list(WORKSPACE_ROOT.iterdir()):
+            if d.is_dir() and d.name not in db_ids:
+                shutil.rmtree(d)
     uvicorn.run(app, host="0.0.0.0", port=8000)
