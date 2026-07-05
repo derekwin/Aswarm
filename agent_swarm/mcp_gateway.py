@@ -362,7 +362,10 @@ class MCPGateway:
 
     @staticmethod
     def _file_reader_handler(path: str, encoding: str = "utf-8") -> str:
-        """读取文件。"""
+        import os as _os
+        ws = _os.environ.get("AGENTSWARM_WORKSPACE", "")
+        if ws and not path.startswith("/"):
+            path = _os.path.join(ws, path)
         try:
             with open(path, "r", encoding=encoding) as f:
                 return f.read()
@@ -371,6 +374,10 @@ class MCPGateway:
 
     @staticmethod
     def _file_writer_handler(path: str, content: str, encoding: str = "utf-8") -> str:
+        import os as _os
+        ws = _os.environ.get("AGENTSWARM_WORKSPACE", "")
+        if ws and not path.startswith("/"):
+            path = _os.path.join(ws, path)
         try:
             os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
             with open(path, "w", encoding=encoding) as f:
