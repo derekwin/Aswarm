@@ -157,14 +157,6 @@ function mermaidSafe(str, maxLen) {
     .slice(0, maxLen)
     .trim() || 'Agent'
 }
-    if (!window.mermaid) {
-      const s = document.createElement('script'); s.src = '/static/mermaid.min.js'
-      s.onload = () => { window.mermaid?.initialize({ startOnLoad: true, theme: 'dark' }); render() }
-      document.head.appendChild(s)
-    } else render()
-  }, [data])
-  return <div dangerouslySetInnerHTML={{ __html: svg }} />
-}
 
 function AgentStepper() {
   const { state, dispatch, t } = useApp()
