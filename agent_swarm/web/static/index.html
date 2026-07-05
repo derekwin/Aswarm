@@ -4,7 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AgentSwarm</title>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+// Mermaid with China-friendly CDN fallback
+(function() {
+  var s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js';
+  s.onerror = function() {
+    var f = document.createElement('script');
+    f.src = 'https://unpkg.com/mermaid@10/dist/mermaid.min.js';
+    document.head.appendChild(f);
+  };
+  document.head.appendChild(s);
+})();
+</script>
 <style>
 :root {
   --bg: #0d0d0d;
@@ -74,7 +86,8 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); heig
 .step:hover { background: rgba(255,255,255,0.02); }
 .step-dot { width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; border: 2px solid var(--border); transition: 0.2s; }
 .step.pending .step-dot { border-color: var(--border); color: var(--text-tertiary); }
-.step.running .step-dot { border-color: var(--accent); color: var(--accent); animation: pulse 1.5s infinite; }
+.step.running .step-dot { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); animation: pulse-step 1.2s infinite; }
+@keyframes pulse-step { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 .step.completed .step-dot { background: var(--green); border-color: var(--green); color: #fff; }
 .step.failed .step-dot { background: var(--red); border-color: var(--red); color: #fff; }
 .step-info { flex: 1; min-width: 0; }
@@ -169,10 +182,17 @@ function newConversation() {
 function switchConversation(id) {
   if (eventSource) eventSource.close();
   activeConvId = id;
+  agentStates = {};  // reset on switch
+  if (conversations[activeConvId]) {
+    conversations[activeConvId]._html = document.getElementById('chatArea').innerHTML;
+  }
   const conv = conversations[id];
   document.getElementById('convTitle').textContent = conv.title;
   const chat = document.getElementById('chatArea');
-  chat.innerHTML = conv.messages.length ? conv.messages.join('') : `<div class="empty-state"><div class="icon">✦</div><h2>What do you want to research?</h2><p>Describe your task to begin.</p></div>`;
+  chat.innerHTML = conv._html || (conv.messages && conv.messages.length ? conv.messages.join('') : '');
+  if (!chat.innerHTML.trim()) {
+    chat.innerHTML = `<div class="empty-state"><div class="icon">✦</div><h2>What do you want to research?</h2><p>Describe your task to begin.</p></div>`;
+  }
   renderConversations();
   document.getElementById('submitBtn').disabled = false;
 }
@@ -232,6 +252,7 @@ function submitTask() {
 }
 
 function handleEvent(data, bubble, stepper) {
+  console.log('[AgentSwarm]', data.type, data.subtask_id || '', data.msg || '');
   const chat = document.getElementById('chatArea');
   switch (data.type) {
     case 'status':
