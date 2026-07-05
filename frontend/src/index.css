@@ -420,7 +420,7 @@ button, .conv-item, .step, .monitor-agent-card, .cmd-result, .suggestion-chip { 
 .user-bubble-wrapper { position: relative; }
 .bubble-actions {
   display: flex; gap: 4px; opacity: 0; transition: opacity 0.2s;
-  padding: 2px 0;
+  padding: 2px 0; justify-content: flex-end;
 }
 .user-bubble-wrapper:hover .bubble-actions { opacity: 1; }
 .bubble-actions.visible { opacity: 1; }
