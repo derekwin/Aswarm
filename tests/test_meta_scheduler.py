@@ -3,6 +3,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 from agent_swarm.meta_scheduler import MetaScheduler, Router
 from agent_swarm.models import TaskDAG, AgentConfig, Subtask
+from agent_swarm.infrastructure.llm_client import LLMClient
 
 
 # ─── Test Data ───
@@ -151,11 +152,8 @@ class TestRouter:
 class TestMetaScheduler:
     @pytest.mark.asyncio
     async def test_decompose(self):
-        scheduler = MetaScheduler(
-            base_url="http://localhost:11434/v1",
-            api_key="ollama",
-            decomposer_model="qwen3.5:35b",
-        )
+        llm = LLMClient(base_url="http://localhost:11434/v1", api_key="ollama")
+        scheduler = MetaScheduler(llm=llm, decomposer_model="qwen3.5:35b")
 
         with patch.object(scheduler, "_call_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = json.dumps(SAMPLE_DECOMPOSER_OUTPUT)
@@ -167,11 +165,8 @@ class TestMetaScheduler:
 
     @pytest.mark.asyncio
     async def test_decompose_invalid_json(self):
-        scheduler = MetaScheduler(
-            base_url="http://localhost:11434/v1",
-            api_key="ollama",
-            decomposer_model="qwen3.5:35b",
-        )
+        llm = LLMClient(base_url="http://localhost:11434/v1", api_key="ollama")
+        scheduler = MetaScheduler(llm=llm, decomposer_model="qwen3.5:35b")
 
         with patch.object(scheduler, "_call_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = "invalid json response without proper structure"

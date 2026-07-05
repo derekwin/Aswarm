@@ -7,7 +7,6 @@ import json
 import logging
 import uuid
 import re
-from openai import AsyncOpenAI
 
 from agent_swarm.models import TaskDAG, Subtask, DivergenceWarning
 from agent_swarm.prompts.decomposer import (
@@ -15,6 +14,7 @@ from agent_swarm.prompts.decomposer import (
     DECOMPOSER_USER_TEMPLATE,
     FEW_SHOT_EXAMPLES,
 )
+from agent_swarm.infrastructure.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -103,11 +103,10 @@ class MetaScheduler:
 
     def __init__(
         self,
-        base_url: str,
-        api_key: str,
+        llm: LLMClient,
         decomposer_model: str = "qwen3.5:35b",
     ):
-        self.client = AsyncOpenAI(base_url=base_url, api_key=api_key)
+        self.llm = llm
         self.decomposer_model = decomposer_model
         self.router = Router()
         self._project_context: str | None = None
@@ -210,21 +209,6 @@ class MetaScheduler:
 
         raise ValueError(f"Failed to parse JSON from LLM output: {raw[:500]}")
 
-    async def _call_llm(
-        self,
-        model: str,
-        system_prompt: str,
-        user_prompt: str,
-        temperature: float = 0.3,
-    ) -> str:
-        """调用 LLM (OpenAI 兼容 API)。"""
-        response = await self.client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=temperature,
-        )
-        content = response.choices[0].message.content or ""
-        return content.strip()
+    async def _call_llm(self, model: str, system_prompt: str, user_prompt: str, temperature: float = 0.3) -> str:
+        msg = await self.llm.chat(model, [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], temperature=temperature)
+        return (msg.content if hasattr(msg, 'content') else str(msg)).strip()

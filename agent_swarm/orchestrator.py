@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-from openai import AsyncOpenAI
 
 from agent_swarm.models import (
     TaskDAG, SwarmState, SubtaskResult, SubtaskState, Subtask, AgentConfig
@@ -70,48 +69,33 @@ class SwarmOrchestrator:
 
     def __init__(
         self,
-        gateway: MCPGateway = None,
-        factory: AgentFactory = None,
-        state_manager: StateManager = None,
-        llm_base_url: str = None,
-        llm_api_key: str = None,
-        max_retries: int = 3,
+        tools: ToolRegistry,
+        factory: AgentFactory,
+        state_manager: StateManager,
+        llm: LLMClient,
         max_subtask_retries: int = 2,
         judge_model: str = "qwen3:4b",
-        tools: ToolRegistry = None,
-        llm: LLMClient = None,
     ):
-        # New-style DI: prefer tools/llm over gateway/raw params
-        self.tools = tools or gateway or MCPGateway()
-        self.factory = factory or AgentFactory(gateway=self.tools if isinstance(self.tools, MCPGateway) else None)
-        self.state_manager = state_manager or StateManager()
-        self.llm = llm or (AsyncOpenAI(base_url=llm_base_url, api_key=llm_api_key) if llm_base_url else None)
-        self.aggregator = ResultAggregator()
-        self.max_retries = max_retries
+        self.tools = tools
+        self.factory = factory
+        self.state_manager = state_manager
+        self.llm = llm
         self.max_subtask_retries = max_subtask_retries
         self.judge_model = judge_model
+        self.aggregator = ResultAggregator()
 
-    # ── Bridge methods for ToolRegistry / LLMClient compatibility ──
+    # ── LLM / Tool helpers ──
 
     def _call_llm(self, model: str, messages: list, tools: list = None,
-                   temperature: float = 0.3, tool_choice: str = "auto"):
-        """Unified LLM call — works with both LLMClient and AsyncOpenAI."""
-        if isinstance(self.llm, LLMClient):
-            return self.llm.chat(model, messages, tools, temperature, tool_choice)
-        kwargs = {"model": model, "messages": messages, "temperature": temperature}
-        if tools:
-            kwargs["tools"] = tools
-            kwargs["tool_choice"] = tool_choice
-        return self.llm.chat.completions.create(**kwargs)
+                   temperature: float = 0.3) -> dict:
+        return self.llm.chat(model, messages, tools, temperature)
 
     async def _call_tool(self, name: str, **kwargs):
-        """Unified tool call — works with both ToolRegistry and MCPGateway."""
         if isinstance(self.tools, ToolRegistry):
             return await self.tools.call(name, **kwargs)
-        return await self.tools.call(name, **kwargs)  # MCPGateway has same interface
+        return await self.tools.call(name, **kwargs)
 
     def _get_tool_schema(self, name: str) -> dict:
-        """Unified tool schema — works with both ToolRegistry and MCPGateway."""
         if isinstance(self.tools, ToolRegistry):
             return self.tools.schema(name)
         return self.tools.get_schema(name)

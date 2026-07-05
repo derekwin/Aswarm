@@ -260,8 +260,7 @@ async def _execute_task(task_id: str, conv_id: str, query: str):
         state_manager = StateManager()
 
         scheduler = MetaScheduler(
-            base_url=settings["llm_base_url"], api_key=settings["llm_api_key"],
-            decomposer_model=settings["decomposer_model"],
+            llm=llm, decomposer_model=settings["decomposer_model"],
         )
 
         orchestrator = SwarmOrchestrator(

@@ -8,6 +8,8 @@ from agent_swarm.models import (
 from agent_swarm.mcp_gateway import MCPGateway
 from agent_swarm.agent_factory import AgentFactory
 from agent_swarm.state_manager import StateManager
+from agent_swarm.infrastructure.llm_client import LLMClient
+from agent_swarm.infrastructure.tool_registry import ToolRegistry
 
 
 @pytest.fixture
@@ -16,8 +18,16 @@ def gateway():
 
 
 @pytest.fixture
-def factory(gateway):
-    return AgentFactory(gateway=gateway)
+def gateway():
+    return MCPGateway()
+
+@pytest.fixture
+def tools():
+    return ToolRegistry()
+
+@pytest.fixture
+def llm():
+    return LLMClient(base_url="http://localhost:11434/v1", api_key="ollama")
 
 
 @pytest.fixture
@@ -70,14 +80,11 @@ class TestResultAggregator:
 
 class TestSwarmOrchestrator:
     @pytest.mark.asyncio
-    async def test_execute_completes_all_subtasks(self, gateway, factory, state_manager, sample_dag):
+    async def test_execute_completes_all_subtasks(self, gateway, tools, llm, state_manager, sample_dag):
+        factory = AgentFactory(gateway=gateway)
         orchestrator = SwarmOrchestrator(
-            gateway=gateway,
-            factory=factory,
-            state_manager=state_manager,
-            llm_base_url="http://localhost:11434/v1",
-            llm_api_key="ollama",
-            judge_model=None,  # disable quality gate in tests
+            tools=tools, factory=factory, state_manager=state_manager, llm=llm,
+            judge_model=None,
         )
 
         async def mock_run_agent(subtask_id, agent, prompt, context):
@@ -97,14 +104,11 @@ class TestSwarmOrchestrator:
             )
 
     @pytest.mark.asyncio
-    async def test_resume_from_checkpoint(self, gateway, factory, state_manager, sample_dag):
+    async def test_resume_from_checkpoint(self, gateway, tools, llm, state_manager, sample_dag):
+        factory = AgentFactory(gateway=gateway)
         orchestrator = SwarmOrchestrator(
-            gateway=gateway,
-            factory=factory,
-            state_manager=state_manager,
-            llm_base_url="http://localhost:11434/v1",
-            llm_api_key="ollama",
-            judge_model=None,  # disable quality gate in tests
+            tools=tools, factory=factory, state_manager=state_manager, llm=llm,
+            judge_model=None,
         )
 
         # Pre-populate a checkpoint (simulate group 1 completed)
