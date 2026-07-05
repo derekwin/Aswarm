@@ -387,6 +387,7 @@ button, .conv-item, .step, .monitor-agent-card, .cmd-result, .suggestion-chip { 
   padding: 10px 12px; border-radius: var(--radius-sm); margin-bottom: 4px;
   background: var(--surface); border: 1px solid transparent; transition: all 0.15s;
   display: flex; align-items: center; gap: 10px; font-size: 0.75rem;
+  position: relative; overflow: hidden;
 }
 .monitor-agent-card.running { border-color: var(--accent); background: var(--accent-glow); }
 .monitor-agent-card.completed { border-color: var(--green); }

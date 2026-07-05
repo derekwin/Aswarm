@@ -10,7 +10,10 @@ export default function LiveMonitor() {
 
   const convId = state.activeConvId
   const conv = convId ? state.conversations[convId] : null
-  const agents = Object.values(conv?.agents || {})
+  const sortedAgents = [...agents].sort((a, b) => {
+    const order = { running: 0, pending: 1, completed: 2, failed: 3 }
+    return (order[a.state] || 4) - (order[b.state] || 4)
+  })
   const totalAgents = conv?.totalAgents || 0
   const completedAgents = conv?.completedAgents || 0
   const pct = totalAgents ? Math.round(completedAgents / totalAgents * 100) : 0
@@ -63,10 +66,11 @@ export default function LiveMonitor() {
             </div>
             {tab === 'agents' ? (
               <div className="monitor-agents" style={{ position: 'relative', overflow: 'hidden' }}>
-                {agents.length === 0 && !conv?.dag && <div className="empty-conv" style={{ padding: 16 }}>{t('waiting')}</div>}
+                {sortedAgents.length === 0 && !conv?.dag && <div className="empty-conv" style={{ padding: 16 }}>{t('waiting')}</div>}
                 {conv?.dag && <DAGView data={conv.dag} />}
-                {agents.map((a, i) => (
+                {sortedAgents.map((a, i) => (
                   <div key={(a.name || 'a') + i} className={'monitor-agent-card ' + (a.state || '')} onClick={() => setDetailAgent(a)}>
+                    {a.state === 'running' && <div style={{ position: 'absolute', top: -1, left: -1, right: -1, height: 2, background: 'var(--accent)', borderRadius: '2px 2px 0 0' }} />}
                     <div className="monitor-agent-icon" style={a.state === 'completed' ? { background: 'var(--green)', borderColor: 'var(--green)', color: '#fff' } : a.state === 'failed' ? { background: 'var(--red)', borderColor: 'var(--red)', color: '#fff' } : a.state === 'running' ? { borderColor: 'var(--accent)', color: 'var(--accent)', animation: 'pulse-dot 1.2s infinite' } : {}}>
                       {a.state === 'completed' ? '✓' : a.state === 'failed' ? '✗' : '·'}
                     </div>
