@@ -58,7 +58,7 @@ export default function ChatArea() {
       {conv.messages.map((m, i) => (
         <div key={i} className={'message fade-up ' + (m.role === 'user' ? 'user user-bubble-wrapper' : 'assistant')}>
           <div className={'avatar ' + m.role}>{m.role === 'user' ? 'U' : 'S'}</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={editingIdx === i ? { flex: 1 } : { flex: 1, minWidth: 0 }}>
             {editingIdx === i ? (
               <div className={'bubble ' + m.role}>
                 <textarea
