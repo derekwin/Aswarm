@@ -18,7 +18,7 @@ export default function LiveMonitor() {
     if (tab === 'files' && convId) {
       fetch('/api/workspace/' + convId).then(r => r.json()).then(d => setFiles(d.files || [])).catch(() => {})
     }
-  }, [tab, convId, done]) // refresh when agents complete
+  }, [tab, convId, completedAgents])
 
   const openFile = async (path) => {
     const r = await fetch('/api/workspace/' + convId + '/file?path=' + encodeURIComponent(path))
