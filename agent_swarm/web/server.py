@@ -353,7 +353,7 @@ async def _execute_task(task_id: str, conv_id: str, query: str):
 
 # ── Periodic Sync ──
 
-async def _periodic_sync(interval_sec: int = 3600):
+async def _periodic_sync(interval_sec: int = 300):
     """Background task: periodically align workspaces with database."""
     while True:
         await asyncio.sleep(interval_sec)
