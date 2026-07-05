@@ -45,6 +45,12 @@ function reducer(state, action) {
     case 'SET_MSGS': return { ...state, conversations: {...state.conversations, [action.payload.id]: {...state.conversations[action.payload.id], messages:action.payload.messages, _loaded:true} }}
     case 'SET_TITLE': return { ...state, conversations: {...state.conversations, [action.payload.id]: {...state.conversations[action.payload.id], title:action.payload.title} }}
     case 'SET_CONV_META': return { ...state, conversations: {...state.conversations, [action.payload.id]: {...state.conversations[action.payload.id], ...action.payload.meta} }}
+    case 'APPEND_ACTIVITY': {
+      const convs = {...state.conversations}
+      const c = convs[action.payload.convId]
+      convs[action.payload.convId] = {...c, activity: [...(c.activity||[]), action.payload.entry].slice(-50)}
+      return {...state, conversations:convs}
+    }
     case 'UPDATE_AGENT': {
       const convs = {...state.conversations}
       const c = convs[action.payload.convId]
@@ -131,6 +137,9 @@ export default function App() {
               const c = state.conversations[convId]
               dispatch({ type: 'SET_CONV_META', payload: { id: convId, meta: { completedAgents: (c.completedAgents||0) + 1 } } })
             }
+            break
+          case 'tool_call':
+            dispatch({ type: 'APPEND_ACTIVITY', payload: { convId, entry: { agent: d.agent_name, tool: d.tool, args: d.args, time: Date.now() } } })
             break
           case 'done':
             dispatch({ type: 'SET_CONNECTED', payload: false })

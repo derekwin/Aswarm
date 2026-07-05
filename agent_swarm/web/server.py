@@ -277,6 +277,25 @@ async def _execute_task(task_id: str, conv_id: str, query: str):
             return result
 
         orchestrator._run_single_agent = hooked_run
+
+        # Hook tool calls
+        original_handle = orchestrator._handle_tool_calls
+        async def hooked_handle(agent, tool_calls, messages):
+            for tc in (tool_calls or []):
+                func_name = tc.function.name
+                try:
+                    func_args = json.loads(tc.function.arguments)
+                    arg_preview = json.dumps(func_args, ensure_ascii=False)[:200]
+                except Exception:
+                    arg_preview = str(tc.function.arguments or "")[:200]
+                _push_event(task_id, {
+                    "type": "tool_call",
+                    "agent_name": agent.name,
+                    "tool": func_name,
+                    "args": arg_preview,
+                })
+            return await original_handle(agent, tool_calls, messages)
+        orchestrator._handle_tool_calls = hooked_handle
         state: SwarmState = await orchestrator.execute(dag)
 
         results = [
