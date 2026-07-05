@@ -44,8 +44,8 @@ body {
   border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0;
 }
 .sidebar-header {
-  padding: 14px 18px; display: flex; align-items: center; gap: 12px;
-  border-bottom: 1px solid var(--border);
+  padding: 0 18px; display: flex; align-items: center; gap: 12px;
+  border-bottom: 1px solid var(--border); min-height: 52px;
 }
 .sidebar-header .logo {
   width: 28px; height: 28px; border-radius: var(--radius-xs);
@@ -95,8 +95,9 @@ body {
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 
 .main-header {
-  padding: 14px 24px; border-bottom: 1px solid var(--border);
+  padding: 0 24px; border-bottom: 1px solid var(--border);
   display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  min-height: 52px;
 }
 .main-header h3 { font-size: 0.9375rem; font-weight: 600; letter-spacing: -0.15px; }
 .header-actions { display: flex; align-items: center; gap: 4px; }
@@ -322,7 +323,7 @@ body {
   .hamburger-btn { display: flex !important; }
   .sidebar { position: fixed; inset: 0; left: 0; z-index: 30; transform: translateX(-100%); width: 288px; }
   .sidebar.open { transform: translateX(0); }
-  .main-header { padding: 10px 16px; }
+  .main-header { padding: 0 16px; min-height: 48px; }
   .chat-area { padding: 20px 16px; gap: 18px; }
   .input-area { padding: 12px 16px 16px; }
   .header-actions .model-badge { display: none; }
