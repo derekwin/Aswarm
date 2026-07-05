@@ -337,7 +337,24 @@ body {
   .input-wrapper button { height: 42px; padding: 0 16px; font-size: 0.8125rem; }
 }
 
-/* ── Animations ── */
+/* ── Touch support ── */
+@media (hover: none) {
+  .conv-item .conv-delete { opacity: 0.6; }
+  .bubble-actions { opacity: 1 !important; position: static; margin-top: 4px; display: flex; }
+  .bubble-actions .bubble-action-btn { padding: 6px 12px; font-size: 0.75rem; }
+  .monitor-agent-card { padding: 12px 14px; }
+  .step { padding: 12px 14px; }
+}
+@media (hover: hover) {
+  .bubble-actions { opacity: 0; }
+  .user-bubble-wrapper:hover .bubble-actions,
+  .message.user:hover .bubble-actions { opacity: 1; }
+  .conv-item .conv-delete { opacity: 0; }
+  .conv-item:hover .conv-delete { opacity: 1; }
+}
+button:active, .conv-item:active, .step:active { filter: brightness(0.95); }
+* { -webkit-tap-highlight-color: transparent; }
+button, .conv-item, .step, .monitor-agent-card, .cmd-result, .suggestion-chip { touch-action: manipulation; }
 .fade-up { animation: fadeUp 0.3s ease; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 

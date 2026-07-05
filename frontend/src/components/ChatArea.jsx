@@ -70,7 +70,7 @@ export default function ChatArea() {
   return (
     <div className="chat-area" ref={ref}>
       {conv.messages.map((m, i) => (
-        <div key={i} className={'message fade-up ' + (m.role === 'user' ? 'user' : 'assistant')} style={m.role === 'user' ? { position: 'relative' } : {}}>
+        <div key={i} className={'message fade-up ' + (m.role === 'user' ? 'user user-bubble-wrapper' : 'assistant')}>
           <div className={'avatar ' + m.role}>{m.role === 'user' ? 'U' : 'S'}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             {editingIdx === i ? (
