@@ -130,7 +130,7 @@ export default function App() {
       if (eventSourceRef.current) eventSourceRef.current.close()
       dispatch({ type: 'SET_CONNECTED', payload: true })
       dispatch({ type: 'SET_CONV_META', payload: { id: convId, meta: { running: true } } })
-      dispatch({ type: 'SET_MONITOR', payload: true })  // auto-open monitor
+      // dispatch({ type: 'SET_MONITOR', payload: true })  // disabled for debug
 
       eventSourceRef.current = new EventSource('/stream/' + task_id)
       eventSourceRef.current.onmessage = (e) => {
@@ -223,7 +223,7 @@ export default function App() {
           <ChatArea />
           {hasConvs && <InputArea />}
         </main>
-        {state.monitorOpen && <LiveMonitor />}
+        {/* {state.monitorOpen && <LiveMonitor />} */}
       </div>
       {state.settingsOpen && <SettingsModal />}
       <AgentPanel />
