@@ -439,3 +439,71 @@ button, .conv-item, .step, .monitor-agent-card, .cmd-result, .suggestion-chip { 
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+
+/* ── Resizable Monitor ── */
+.live-monitor {
+  border-left: 1px solid var(--border);
+  background: var(--bg-deeper); display: flex; flex-direction: column;
+  flex-shrink: 0; position: relative; overflow: hidden;
+}
+.live-monitor.collapsed { width: 6px !important; cursor: pointer; min-width: 6px; }
+.live-monitor.collapsed:hover { background: var(--accent-glow); }
+.monitor-resize-handle {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  cursor: col-resize; z-index: 2; transition: background 0.15s;
+}
+.monitor-resize-handle:hover { background: var(--accent); }
+.monitor-toggle-collapse {
+  position: absolute; left: -16px; top: 50%; transform: translateY(-50%);
+  width: 16px; height: 40px; background: var(--surface); border: 1px solid var(--border);
+  border-right: none; border-radius: 6px 0 0 6px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.6rem; color: var(--text-secondary); z-index: 3; transition: all 0.15s;
+}
+.monitor-toggle-collapse:hover { color: var(--accent); background: var(--accent-hover); }
+.monitor-collapse-line {
+  position: fixed; right: 0; top: 0; bottom: 0; width: 4px; z-index: 2;
+  background: var(--border); cursor: pointer; transition: all 0.15s;
+  display: none;
+}
+.monitor-collapse-line.show { display: block; }
+.monitor-collapse-line:hover { background: var(--accent); width: 6px; }
+
+/* ── Inline Agent Dots ── */
+.agent-dots { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.agent-dot { display: flex; align-items: center; gap: 4px; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; cursor: pointer; transition: all 0.15s; }
+.agent-dot:hover { background: var(--hover-row); }
+.agent-dot .dot { width: 6px; height: 6px; border-radius: 50%; }
+.agent-dot .dot.pending { background: var(--text-tertiary); }
+.agent-dot .dot.running { background: var(--accent); animation: pulse-dot 1.2s infinite; }
+.agent-dot .dot.completed { background: var(--green); }
+.agent-dot .dot.failed { background: var(--red); }
+.view-monitor-btn { font-size: 0.7rem; color: var(--accent); cursor: pointer; margin-top: 6px; display: inline-block; }
+.view-monitor-btn:hover { text-decoration: underline; }
+
+/* ── Stop Button ── */
+.stop-btn {
+  padding: 0 22px; background: var(--red); border: none; border-radius: var(--radius-lg);
+  color: white; font-weight: 600; cursor: pointer; font-size: 0.875rem; font-family: inherit;
+  transition: filter 0.15s; flex-shrink: 0; height: 48px; letter-spacing: -0.1px;
+}
+.stop-btn:hover { filter: brightness(1.12); }
+
+/* ── Monitor Detail Slide-out ── */
+.monitor-detail {
+  position: absolute; right: 0; top: 0; bottom: 0; width: 100%;
+  background: var(--bg-deeper); z-index: 4; display: flex; flex-direction: column;
+  transform: translateX(100%); transition: transform 0.25s ease;
+}
+.monitor-detail.open { transform: translateX(0); }
+.monitor-detail-header { padding: 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.monitor-detail-header h3 { font-size: 0.85rem; font-weight: 600; }
+.monitor-detail-content { flex: 1; overflow-y: auto; padding: 16px; font-size: 0.75rem; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap; }
+.monitor-back-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); cursor: pointer; font-size: 0.7rem; transition: all 0.12s; }
+.monitor-back-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Activity Inline ── */
+.agent-activity-inline { margin-top: 4px; padding: 4px 0 0 0; border-top: 1px solid var(--border); display: none; }
+.agent-activity-inline.show { display: block; }
+.activity-expand-btn { font-size: 0.65rem; color: var(--text-muted); cursor: pointer; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); background: none; transition: all 0.12s; }
+.activity-expand-btn:hover { border-color: var(--accent); color: var(--accent); }

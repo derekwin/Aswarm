@@ -2,10 +2,13 @@ import { useState, useRef } from 'react'
 import { useApp } from '../App'
 
 export default function InputArea() {
-  const { state, dispatch, t, runTask } = useApp()
+  const { state, dispatch, t, runTask, cancelTask } = useApp()
   const [query, setQuery] = useState('')
   const [sending, setSending] = useState(false)
   const taRef = useRef(null)
+
+  const conv = state.activeConvId ? state.conversations[state.activeConvId] : null
+  const isRunning = conv?.running
 
   const autoResize = () => { const el=taRef.current; if(!el)return; el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,140)+'px' }
 
@@ -34,7 +37,11 @@ export default function InputArea() {
       <label className="upload-btn" title="Upload file"><input type="file" accept=".pdf,.txt,.md,.py,.json,.csv" onChange={handleFile} style={{display:'none'}}/>📎</label>
       <textarea id="queryInput" ref={taRef} value={query} onChange={e=>{setQuery(e.target.value);autoResize()}} onInput={autoResize} placeholder={t('taskPlaceholder')} rows={1}
         onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submit()}}}/>
-      <button onClick={submit} disabled={sending}>{t('send')}</button>
+      {isRunning ? (
+        <button className="stop-btn" onClick={cancelTask}>Stop</button>
+      ) : (
+        <button onClick={submit} disabled={sending}>{t('send')}</button>
+      )}
     </div></div>
   )
 }

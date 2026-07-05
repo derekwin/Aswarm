@@ -68,6 +68,9 @@ export default function ChatArea() {
                 }
               </div>
             )}
+            {m.role === 'assistant' && !m.typing && conv?.agents && Object.keys(conv.agents).length > 0 && (
+              <InlineAgentDots />
+            )}
             {m.role === 'user' && editingIdx !== i && (
               <div className="bubble-actions">
                 <button className="bubble-action-btn" onClick={() => startEdit(i, m.content)}>✎ Edit</button>
@@ -128,22 +131,22 @@ function mermaidSafe(str, maxLen) {
     .trim() || 'Agent'
 }
 
-function AgentStepper() {
-  const { state, dispatch, t } = useApp()
+function InlineAgentDots() {
+  const { state, dispatch } = useApp()
   const conv = state.activeConvId ? state.conversations[state.activeConvId] : null
   const agents = Object.entries(conv?.agents || {})
-  if (!agents.length) return <div className="stepper"><div className="stepper-header"><span>{t('agents')}</span></div></div>
+  if (!agents.length) return null
   return (
-    <div className="stepper">
-      <div className="stepper-header"><span>{t('agents')}</span><span className="badge">{agents.length}</span></div>
-      <div className="stepper-steps">
+    <div>
+      <div className="agent-dots">
         {agents.map(([id, a]) => (
-          <div key={id} className={'step ' + a.state} onClick={() => dispatch({ type: 'SET_PANEL', payload: { ...a, name: a.name || id } })}>
-            <div className="step-dot">{a.state === 'completed' ? '✓' : a.state === 'failed' ? '✗' : '·'}</div>
-            <div className="step-info"><div className="step-name">{a.name || id}</div><div className="step-meta">{a.state + (a.retry ? ' · retries:' + a.retry : '')}</div></div>
+          <div key={id} className="agent-dot" onClick={() => { dispatch({ type: 'SET_MONITOR', payload: true }) }}>
+            <div className={'dot ' + a.state} />
+            <span>{a.name || id}</span>
           </div>
         ))}
       </div>
+      {!state.monitorOpen && <div className="view-monitor-btn" onClick={() => dispatch({ type: 'SET_MONITOR', payload: true })}>View in Monitor →</div>}
     </div>
   )
 }

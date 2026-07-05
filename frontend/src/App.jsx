@@ -61,6 +61,7 @@ function reducer(state, action) {
     case 'SET_LANG': return { ...state, lang: action.payload }
     case 'SET_CONNECTED': return { ...state, connected: action.payload }
     case 'SET_MONITOR': return { ...state, monitorOpen: action.payload }
+    case 'SET_MONITOR_WIDTH': return { ...state, monitorWidth: action.payload }
     case 'SET_SIDEBAR_OPEN': return { ...state, sidebarOpen: action.payload }
     case 'SET_PANEL': return { ...state, panelAgent: action.payload }
     case 'SET_SETTINGS_OPEN': return { ...state, settingsOpen: action.payload }
@@ -74,8 +75,9 @@ function initState() {
   return {
     conversations:{}, activeConvId:null,
     theme:localStorage.getItem('theme')==='light'?'light':'dark',
-    lang:localStorage.getItem('lang')||'en', connected:false, monitorOpen:false, panelAgent:null,
-    settingsOpen:false, sidebarOpen:false, toasts:[],
+    lang:localStorage.getItem('lang')||'en', connected:false, monitorOpen:false,
+    monitorWidth: parseInt(localStorage.getItem('monitorWidth')) || 480,
+    panelAgent:null, settingsOpen:false, sidebarOpen:false, toasts:[],
   }
 }
 
@@ -116,6 +118,7 @@ export default function App() {
       if (eventSourceRef.current) eventSourceRef.current.close()
       dispatch({ type: 'SET_CONNECTED', payload: true })
       dispatch({ type: 'SET_CONV_META', payload: { id: convId, meta: { running: true } } })
+      dispatch({ type: 'SET_MONITOR', payload: true })  // auto-open monitor
 
       eventSourceRef.current = new EventSource('/stream/' + task_id)
       eventSourceRef.current.onmessage = (e) => {
@@ -165,7 +168,25 @@ export default function App() {
     }
   }, [t, eventSourceRef, state.conversations])
 
-  const value = { state, dispatch, t, eventSourceRef, runTask }
+  const cancelTask = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+    }
+    dispatch({ type: 'SET_CONNECTED', payload: false })
+    if (state.activeConvId) {
+      dispatch({ type: 'SET_CONV_META', payload: { id: state.activeConvId, meta: { running: false } } })
+      dispatch({ type: 'UPDATE_LAST_MSG', payload: { id: state.activeConvId, updates: { content: 'Task cancelled by user.', typing: false } } })
+    }
+  }, [state.activeConvId])
+
+  const setMonitorWidth = useCallback((w) => {
+    const clamped = Math.max(360, Math.min(640, w))
+    dispatch({ type: 'SET_MONITOR_WIDTH', payload: clamped })
+    localStorage.setItem('monitorWidth', clamped)
+  }, [])
+
+  const value = { state, dispatch, t, eventSourceRef, runTask, cancelTask, setMonitorWidth }
 
   return (
     <AppContext.Provider value={value}>
