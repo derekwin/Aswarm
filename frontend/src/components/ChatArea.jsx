@@ -107,16 +107,6 @@ function mdRender(text) {
     .replace(/`([^`]+)`/g,'<code class="md-code">$1</code>')
     .replace(/\n/g,'<br>')
 }
-
-    if (!window.mermaid) {
-      const s = document.createElement('script'); s.src = '/static/mermaid.min.js'
-      s.onload = () => { window.mermaid?.initialize({ startOnLoad: true, theme: 'dark' }); render() }
-      document.head.appendChild(s)
-    } else render()
-  }, [data])
-  return <div dangerouslySetInnerHTML={{ __html: svg }} />
-}
-
 function mermaidSafe(str, maxLen) {
   return (str || '')
     .replace(/[\[\]{}()"'`#&;:<>\\]/g, '')  // remove Mermaid-breaking chars
