@@ -11,6 +11,7 @@ from agent_swarm.models import (
 from agent_swarm.mcp_gateway import MCPGateway
 from agent_swarm.agent_factory import AgentFactory, Agent
 from agent_swarm.state_manager import StateManager
+from agent_swarm.context import get_context
 
 logger = logging.getLogger(__name__)
 
@@ -376,16 +377,23 @@ class SwarmOrchestrator:
         return tools
 
     def _build_messages(self, agent: Agent, prompt: str, context: str) -> list[dict]:
-        # 注入工具能力说明和沙箱信息
+        # Build smart context using ContextManager
+        ctx_mgr = get_context()
+        # Parse upstream results from context string (format: "[t1]: output\n\n[t2]: output")
+        upstream_results = []
+        if context:
+            for block in context.split("\n\n"):
+                if block.strip():
+                    upstream_results.append(SubtaskResult(
+                        subtask_id=block.split("]:")[0].replace("[", "") if "]: " in block else "unknown",
+                        output=block, state=SubtaskState.COMPLETED
+                    ))
+        smart_context = ctx_mgr.build(agent.role, prompt, upstream_results)
+        
         capabilities = self._build_capabilities_block(agent.tool_names())
-        full_system = agent.system_prompt + capabilities
+        full_system = agent.system_prompt + capabilities + "\n\n## Context\n" + smart_context if smart_context else agent.system_prompt + capabilities
 
         messages = [{"role": "system", "content": full_system}]
-        if context:
-            messages.append({
-                "role": "system",
-                "content": f"Output from upstream agents (reference context):\n{context}",
-            })
         messages.append({"role": "user", "content": prompt})
         return messages
 
