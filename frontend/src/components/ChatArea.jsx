@@ -85,9 +85,6 @@ export default function ChatArea() {
                 }
               </div>
             )}
-            {m.role === 'assistant' && !m.typing && conv?.agents && Object.keys(conv.agents).length > 0 && (
-              <InlineAgentDots />
-            )}
             {m.role === 'user' && editingIdx !== i && (
               <div className="bubble-actions">
                 <button className="bubble-action-btn" onClick={() => startEdit(i, m.content)}>✎ {t('edit')}</button>
