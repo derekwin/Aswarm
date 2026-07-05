@@ -325,7 +325,7 @@ const UI = {
   },
 
   // ── Sidebar ──
-  toggleSidebar() { ["sidebar", "sidebar-overlay"].forEach(id => D(id).classList.toggle(id === "sidebar" ? "open" : "show")); },
+  toggleSidebar() { D("sidebar").classList.toggle("open"); D("sidebar-overlay").classList.toggle("show"); },
 
   // ── Command Palette ──
   openPalette() { D("cmdPalette").classList.add("open"); D("paletteInput").value = ""; D("paletteInput").focus(); UI.filterPalette(); },
@@ -401,10 +401,4 @@ document.addEventListener("keydown", e => {
 });
 
 // ── Boot ──
-document.addEventListener("DOMContentLoaded", () => {
-  UI.init();
-  // Show hamburger on mobile
-  if (window.innerWidth < 768) {
-    document.querySelector(".md-hide").style.display = "flex";
-  }
-});
+document.addEventListener("DOMContentLoaded", () => UI.init());
