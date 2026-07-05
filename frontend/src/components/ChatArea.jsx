@@ -61,7 +61,7 @@ export default function ChatArea() {
             ) : (
               <div className={'bubble ' + m.role}>
                 {m.typing
-                  ? <span className="typing">{t('classifying')}</span>
+                  ? <span className="typing">{m.content || t('classifying')}</span>
                   : m.content && m.content.startsWith('<')
                     ? <span dangerouslySetInnerHTML={{ __html: m.content }} />
                     : <span dangerouslySetInnerHTML={{ __html: mdRender(m.content || '') }} />
