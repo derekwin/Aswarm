@@ -20,6 +20,7 @@ logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="AgentSwarm Dashboard")
 
 STATIC_DIR = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # In-memory event queues per task_id
 _streams: dict[str, asyncio.Queue] = {}
