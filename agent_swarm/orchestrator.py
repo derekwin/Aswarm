@@ -221,15 +221,12 @@ class SwarmOrchestrator:
     async def _evaluate_output(self, task_prompt: str, output: str) -> tuple[bool, str]:
         user_prompt = f"Task requirement: {task_prompt[:300]}\n\nAgent output: {output[:600]}"
         try:
-            resp = await self.llm.chat.completions.create(
-                model=self.judge_model,
-                messages=[
-                    {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
+            msg = await self._call_llm(
+                self.judge_model,
+                [{"role": "system", "content": JUDGE_SYSTEM_PROMPT}, {"role": "user", "content": user_prompt}],
                 temperature=0.1,
             )
-            raw = resp.choices[0].message.content or '{"pass":true,"reason":"parse error"}'
+            raw = (msg.content if hasattr(msg, 'content') else msg.get('content', '')) or '{"pass":true,"reason":"parse error"}'
             parsed = json.loads(raw)
             return parsed.get("pass", True), parsed.get("reason", "")
         except Exception:
@@ -271,12 +268,12 @@ class SwarmOrchestrator:
                 "Output JSON: {\"name\": \"agent_name\", \"role\": \"role\", "
                 "\"system_prompt\": \"...\", \"tools\": [\"tool1\"], \"prompt\": \"new task prompt\"}"
             )
-            resp = await self.llm.chat.completions.create(
-                model=self.judge_model,
-                messages=[{"role": "user", "content": replan_prompt}],
+            msg = await self._call_llm(
+                self.judge_model,
+                [{"role": "user", "content": replan_prompt}],
                 temperature=0.5,
             )
-            raw = resp.choices[0].message.content or ""
+            raw = (msg.content if hasattr(msg, 'content') else msg.get('content', '')) or ""
             parsed = json.loads(raw.strip().removeprefix("```json").removesuffix("```").strip())
             return Subtask(
                 id=subtask.id,
@@ -368,34 +365,8 @@ class SwarmOrchestrator:
             iterations_used=iteration,
         )
 
-    async def _call_llm_with_retry(self, model: str, messages: list[dict], tools: list[dict]):
-        last_error: Exception | None = None
-        for attempt in range(self.max_retries):
-            try:
-                kwargs = {
-                    "model": model,
-                    "messages": messages,
-                    "temperature": 0.3,
-                }
-                if tools:
-                    kwargs["tools"] = tools
-                    kwargs["tool_choice"] = "auto"
-
-                return await self.llm.chat.completions.create(**kwargs)
-
-            except RETRYABLE_ERRORS as e:
-                last_error = e
-                wait = 2 ** attempt
-                logger.warning(
-                    f"LLM call attempt {attempt + 1}/{self.max_retries} failed: {e}. "
-                    f"Retrying in {wait}s..."
-                )
-                await asyncio.sleep(wait)
-
-            except Exception:
-                raise  # non-retryable, propagate immediately
-
-        raise last_error
+    async def _call_llm_with_retry(self, model: str, messages: list[dict], tools: list[dict] = None):
+        return await self._call_llm(model, messages, tools)
 
     async def _handle_tool_calls(self, agent: Agent, tool_calls, messages: list) -> list:
         for tool_call in tool_calls:
