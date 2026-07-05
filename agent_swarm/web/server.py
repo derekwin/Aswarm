@@ -266,10 +266,8 @@ async def _execute_task(task_id: str, conv_id: str, query: str):
             max_subtask_retries=2,
         )
 
-        _push_event(task_id, {"type": "status", "msg": "Classifying task..."})
-        intent = await scheduler.classify(query)
         _push_event(task_id, {"type": "status", "msg": "Decomposing task..."})
-        dag: TaskDAG = await scheduler.decompose(query, intent)
+        dag: TaskDAG = await scheduler.decompose(query, "multi")
         storage.update_task(task_id, "running", dag.intent, len(dag.subtasks))
         storage.update_conversation_title(conv_id, query[:40])
 
