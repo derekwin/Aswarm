@@ -213,6 +213,7 @@ async def run_task(query: str = Query(...), conv_id: str = Query(default="")):
     if not conv_id:
         conv_id = f"conv_{id(query)}_{len(storage.list_conversations())}"
         storage.create_conversation(conv_id, "New Task")
+        (WORKSPACE_ROOT / conv_id).mkdir(parents=True, exist_ok=True)
 
     task_id = f"task_{id(query)}_{len(_streams)}"
     _streams[task_id] = asyncio.Queue()
