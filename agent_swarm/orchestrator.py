@@ -12,6 +12,8 @@ from agent_swarm.mcp_gateway import MCPGateway
 from agent_swarm.agent_factory import AgentFactory, Agent
 from agent_swarm.state_manager import StateManager
 from agent_swarm.context import get_context
+from agent_swarm.infrastructure.llm_client import LLMClient
+from agent_swarm.infrastructure.tool_registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -68,23 +70,51 @@ class SwarmOrchestrator:
 
     def __init__(
         self,
-        gateway: MCPGateway,
-        factory: AgentFactory,
-        state_manager: StateManager,
-        llm_base_url: str,
-        llm_api_key: str,
+        gateway: MCPGateway = None,
+        factory: AgentFactory = None,
+        state_manager: StateManager = None,
+        llm_base_url: str = None,
+        llm_api_key: str = None,
         max_retries: int = 3,
         max_subtask_retries: int = 2,
         judge_model: str = "qwen3:4b",
+        tools: ToolRegistry = None,
+        llm: LLMClient = None,
     ):
-        self.gateway = gateway
-        self.factory = factory
-        self.state_manager = state_manager
-        self.llm = AsyncOpenAI(base_url=llm_base_url, api_key=llm_api_key)
+        # New-style DI: prefer tools/llm over gateway/raw params
+        self.tools = tools or gateway or MCPGateway()
+        self.factory = factory or AgentFactory(gateway=self.tools if isinstance(self.tools, MCPGateway) else None)
+        self.state_manager = state_manager or StateManager()
+        self.llm = llm or (AsyncOpenAI(base_url=llm_base_url, api_key=llm_api_key) if llm_base_url else None)
         self.aggregator = ResultAggregator()
         self.max_retries = max_retries
         self.max_subtask_retries = max_subtask_retries
-        self.judge_model = judge_model  # None = skip quality gate
+        self.judge_model = judge_model
+
+    # ── Bridge methods for ToolRegistry / LLMClient compatibility ──
+
+    def _call_llm(self, model: str, messages: list, tools: list = None,
+                   temperature: float = 0.3, tool_choice: str = "auto"):
+        """Unified LLM call — works with both LLMClient and AsyncOpenAI."""
+        if isinstance(self.llm, LLMClient):
+            return self.llm.chat(model, messages, tools, temperature, tool_choice)
+        kwargs = {"model": model, "messages": messages, "temperature": temperature}
+        if tools:
+            kwargs["tools"] = tools
+            kwargs["tool_choice"] = tool_choice
+        return self.llm.chat.completions.create(**kwargs)
+
+    async def _call_tool(self, name: str, **kwargs):
+        """Unified tool call — works with both ToolRegistry and MCPGateway."""
+        if isinstance(self.tools, ToolRegistry):
+            return await self.tools.call(name, **kwargs)
+        return await self.tools.call(name, **kwargs)  # MCPGateway has same interface
+
+    def _get_tool_schema(self, name: str) -> dict:
+        """Unified tool schema — works with both ToolRegistry and MCPGateway."""
+        if isinstance(self.tools, ToolRegistry):
+            return self.tools.schema(name)
+        return self.tools.get_schema(name)
 
     async def execute(self, dag: TaskDAG) -> SwarmState:
         state = self.state_manager.initialize(dag.task_id, dag)
@@ -378,7 +408,7 @@ class SwarmOrchestrator:
             logger.info(f"  Agent '{agent.name}' calls tool: {func_name}")
 
             try:
-                tool_result = await self.gateway.call(func_name, **func_args)
+                tool_result = await self._call_tool(func_name, **func_args)
                 tool_result_str = str(tool_result)
             except Exception as e:
                 tool_result_str = f"Tool call failed: {e}"
@@ -409,7 +439,7 @@ class SwarmOrchestrator:
         tools = []
         for tool_name in agent.tool_names():
             try:
-                schema = self.gateway.get_schema(tool_name)
+                schema = self._get_tool_schema(tool_name)
                 tools.append({
                     "type": "function",
                     "function": {
@@ -452,7 +482,7 @@ class SwarmOrchestrator:
         
         for name in tool_names:
             try:
-                schema = self.gateway.get_schema(name)
+                schema = self._get_tool_schema(name)
                 parts.append(f"- **{name}**: {schema['description']}")
             except KeyError:
                 pass

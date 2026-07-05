@@ -17,6 +17,8 @@ from agent_swarm import (
 )
 from agent_swarm.web.storage import get_storage
 from agent_swarm.trace import trace
+from agent_swarm.infrastructure.llm_client import LLMClient
+from agent_swarm.infrastructure.tool_registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -251,8 +253,10 @@ async def _execute_task(task_id: str, conv_id: str, query: str):
         ws = WORKSPACE_ROOT / conv_id
         os.environ["AGENTSWARM_WORKSPACE"] = str(ws)
 
-        gateway = MCPGateway()
-        factory = AgentFactory(gateway=gateway, default_model=settings["default_model"])
+        # Composition Root: wire dependencies
+        tools = ToolRegistry()
+        llm = LLMClient(base_url=settings["llm_base_url"], api_key=settings["llm_api_key"])
+        factory = AgentFactory(gateway=MCPGateway())  # factory still uses MCPGateway for tool validation
         state_manager = StateManager()
 
         scheduler = MetaScheduler(
@@ -261,8 +265,7 @@ async def _execute_task(task_id: str, conv_id: str, query: str):
         )
 
         orchestrator = SwarmOrchestrator(
-            gateway=gateway, factory=factory, state_manager=state_manager,
-            llm_base_url=settings["llm_base_url"], llm_api_key=settings["llm_api_key"],
+            tools=tools, llm=llm, factory=factory, state_manager=state_manager,
             max_subtask_retries=2,
         )
 

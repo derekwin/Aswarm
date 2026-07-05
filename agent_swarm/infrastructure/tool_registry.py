@@ -54,8 +54,11 @@ class ToolRegistry:
     def register(self, tool: Tool):
         self._tools[tool.name] = tool
 
-    def list(self) -> list[str]:
+    def names(self) -> list[str]:
         return list(self._tools.keys())
+
+    def available_tools(self) -> list[str]:  # alias for AgentFactory compat
+        return self.names()
 
     def schema(self, name: str) -> dict:
         t = self._get(name)
@@ -81,7 +84,7 @@ class ToolRegistry:
 
     def _get(self, name: str) -> Tool:
         if name not in self._tools:
-            raise KeyError(f"Tool '{name}' not found. Available: {self.list()}")
+            raise KeyError(f"Tool '{name}' not found. Available: {self.names()}")
         return self._tools[name]
 
     def _try_schema(self, name: str) -> dict | None:
