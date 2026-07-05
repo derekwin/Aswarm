@@ -349,16 +349,41 @@ async def _execute_task(task_id: str, conv_id: str, query: str):
         _streams.pop(task_id, None)
 
 
+# ── Periodic Sync ──
+
+async def _periodic_sync(interval_sec: int = 3600):
+    """Background task: periodically align workspaces with database."""
+    while True:
+        await asyncio.sleep(interval_sec)
+        try:
+            convs = storage.list_conversations()
+            db_ids = {c["id"] for c in convs}
+            # Ensure all have workspace dirs
+            for c in convs:
+                (WORKSPACE_ROOT / c["id"]).mkdir(parents=True, exist_ok=True)
+            # Clean orphans
+            if WORKSPACE_ROOT.exists():
+                for d in list(WORKSPACE_ROOT.iterdir()):
+                    if d.is_dir() and d.name not in db_ids:
+                        shutil.rmtree(d)
+                        logger.info(f"Cleaned orphan workspace: {d.name}")
+        except Exception as e:
+            logger.warning(f"Periodic sync failed: {e}")
+
+
 if __name__ == "__main__":
     import uvicorn
     # Sync on startup
     convs = storage.list_conversations()
     for c in convs:
         (WORKSPACE_ROOT / c["id"]).mkdir(parents=True, exist_ok=True)
-    # Clean orphans
     if WORKSPACE_ROOT.exists():
         db_ids = {c["id"] for c in convs}
         for d in list(WORKSPACE_ROOT.iterdir()):
             if d.is_dir() and d.name not in db_ids:
                 shutil.rmtree(d)
+    # Start periodic sync background task
+    @app.on_event("startup")
+    async def start_sync():
+        asyncio.create_task(_periodic_sync())
     uvicorn.run(app, host="0.0.0.0", port=8000)
