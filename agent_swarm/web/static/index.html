@@ -24,10 +24,29 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
 .md-bold { font-weight: 600; color: #ececec; }
 .md-code { background: #0a0a0a; border: 1px solid #262626; border-radius: 6px; padding: 1px 6px; font-size: 0.8em; font-family: 'SF Mono', 'Fira Code', monospace; }
 .md-codeblock { background: #0a0a0a; border: 1px solid #262626; border-radius: 8px; padding: 10px 14px; font-size: 0.78rem; font-family: 'SF Mono', 'Fira Code', monospace; white-space: pre-wrap; overflow-x: auto; margin: 6px 0; }
+.cmd-palette { display: none; } .cmd-palette.open { display: flex; }
+.toast { animation: slideDown 0.3s ease; }
+@keyframes slideDown { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
+.agent-panel { transform: translateX(100%); transition: transform 0.25s ease; }
+.agent-panel.open { transform: translateX(0); }
 </style>
 </head>
 <body class="bg-[#0d0d0d] text-[#ececec] h-screen flex overflow-hidden">
 
+<!-- Command Palette -->
+<div id="cmdPalette" class="cmd-palette fixed inset-0 z-50 items-start justify-center pt-[15vh]" onclick="closePalette(event)">
+  <div class="w-full max-w-lg bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden" onclick="event.stopPropagation()">
+    <input id="paletteInput" type="text" placeholder="Search conversations or type a command..."
+      class="w-full px-5 py-4 bg-transparent text-sm text-[#ececec] placeholder-[#666] focus:outline-none border-b border-border"
+      oninput="filterPalette()" onkeydown="paletteKeydown(event)">
+    <div id="paletteResults" class="max-h-80 overflow-y-auto p-2"></div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toastContainer" class="fixed top-4 right-4 z-50 flex flex-col gap-2"></div>
+
+<!-- Sidebar overlay -->
 <div class="sidebar-overlay hidden fixed inset-0 bg-black/60 z-20 md:hidden" onclick="toggleSidebar()"></div>
 
 <aside id="sidebar" class="w-72 bg-[#0a0a0a] border-r border-border flex flex-col flex-shrink-0 fixed md:static inset-y-0 left-0 z-30 transform -translate-x-full md:translate-x-0 transition-transform duration-300">
@@ -38,6 +57,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
   <button onclick="newConversation(); if(window.innerWidth<768)toggleSidebar()" class="mx-3 mt-3 px-4 py-2.5 rounded-xl border border-border bg-surface hover:border-accent hover:bg-[rgba(108,92,231,0.08)] text-sm transition flex items-center gap-2">
     <span class="text-lg leading-none">+</span> New Task
   </button>
+  <div class="px-3 pt-2">
+    <input id="convSearch" type="text" placeholder="Search conversations..." oninput="renderConvs()"
+      class="w-full px-3 py-1.5 bg-[#0a0a0a] border border-border rounded-lg text-xs text-[#999] placeholder-[#555] focus:outline-none focus:border-accent transition">
+  </div>
   <div id="convList" class="flex-1 overflow-y-auto p-2">
     <div class="text-center py-6 text-[#666] text-xs">No conversations yet</div>
   </div>
@@ -74,13 +97,84 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
   </div>
 </main>
 
+<!-- Agent detail panel -->
+<div id="agentPanel" class="agent-panel fixed right-0 top-0 bottom-0 w-80 sm:w-96 bg-[#0a0a0a] border-l border-border z-40 flex flex-col">
+  <div class="p-4 border-b border-border flex items-center justify-between">
+    <h3 id="panelTitle" class="text-sm font-semibold">Agent Details</h3>
+    <button onclick="closeAgentPanel()" class="p-1 rounded-lg hover:bg-surface transition">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+    </button>
+  </div>
+  <div id="panelContent" class="flex-1 overflow-y-auto p-4 text-xs leading-relaxed text-[#999] whitespace-pre-wrap"></div>
+</div>
+
 <script>
 var conversations = {}, activeConvId = null, eventSource = null, agentStates = {};
 var totalAgents = 0, completedAgents = 0;
 
+// Keyboard shortcuts
 document.addEventListener('keydown', function(e) {
+  if ((e.ctrlKey||e.metaKey) && e.key==='k') { e.preventDefault(); openPalette(); }
   if ((e.ctrlKey||e.metaKey) && e.key==='n') { e.preventDefault(); newConversation(); }
+  if (e.key==='Escape') {
+    if (document.getElementById('cmdPalette').classList.contains('open')) closePalette();
+    else if (document.getElementById('agentPanel').classList.contains('open')) closeAgentPanel();
+    else closeSidebar();
+  }
+  if ((e.ctrlKey||e.metaKey) && e.key==='Enter') { e.preventDefault(); submitTask(); }
 });
+
+function openPalette() {
+  document.getElementById('cmdPalette').classList.add('open');
+  document.getElementById('paletteInput').value = '';
+  document.getElementById('paletteInput').focus();
+  filterPalette();
+}
+function closePalette(e) { if (e && e.target !== document.getElementById('cmdPalette')) return; document.getElementById('cmdPalette').classList.remove('open'); }
+function closeSidebar() { document.getElementById('sidebar').classList.add('-translate-x-full'); document.body.classList.remove('sidebar-open'); }
+
+function filterPalette() {
+  var q = document.getElementById('paletteInput').value.toLowerCase();
+  var ids = Object.keys(conversations);
+  var results = [];
+  if (!q) results = ids.slice(-8).reverse();
+  else results = ids.filter(function(id) { return conversations[id].title.toLowerCase().includes(q); });
+  var html = '<div class="px-3 py-2 text-[10px] text-[#555] uppercase tracking-wider">' + (q ? 'Results' : 'Recent') + '</div>';
+  if (!results.length) html += '<div class="px-3 py-4 text-center text-xs text-[#555]">No results</div>';
+  for (var i = 0; i < results.length; i++) {
+    var c = conversations[results[i]];
+    html += '<div class="px-3 py-2 rounded-lg cursor-pointer hover:bg-[rgba(255,255,255,0.03)] text-sm flex items-center justify-between" onclick="switchConversation(\'' + results[i] + '\');closePalette();">' +
+      '<span>' + esc(c.title) + '</span><span class="text-[10px] text-[#555]">' + c.time + '</span></div>';
+  }
+  html += '<div class="border-t border-border mt-2 pt-2 px-3 py-2 rounded-lg cursor-pointer hover:bg-[rgba(108,92,231,0.08)] text-sm text-accent" onclick="newConversation();closePalette();">+ New Task</div>';
+  document.getElementById('paletteResults').innerHTML = html;
+}
+
+function paletteKeydown(e) {
+  if (e.key === 'Escape') closePalette();
+  if (e.key === 'Enter') {
+    var first = document.querySelector('#paletteResults .cursor-pointer');
+    if (first) { first.click(); closePalette(); }
+  }
+}
+
+function showToast(msg) {
+  var t = document.createElement('div');
+  t.className = 'toast px-4 py-3 bg-surface border border-border rounded-xl text-sm shadow-lg max-w-xs';
+  t.innerHTML = msg;
+  t.style.animation = 'slideDown 0.3s ease';
+  document.getElementById('toastContainer').appendChild(t);
+  setTimeout(function() { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; setTimeout(function() { t.remove(); }, 300); }, 4000);
+}
+
+function openAgentPanel(tid) {
+  var inf = agentStates[tid];
+  if (!inf || (!inf.output && !inf.error)) return;
+  document.getElementById('panelTitle').textContent = inf.name || tid;
+  document.getElementById('panelContent').innerHTML = mdRender((inf.output||'') + (inf.error ? '\n\n[ERROR: ' + inf.error + ']' : '') + (inf.retry ? '\nRetries: ' + inf.retry : ''));
+  document.getElementById('agentPanel').classList.add('open');
+}
+function closeAgentPanel() { document.getElementById('agentPanel').classList.remove('open'); }
 
 function emptyStateHTML(sm) {
   return '<div class="flex flex-col items-center justify-center flex-1 gap-4 sm:gap-5">'+
@@ -152,7 +246,9 @@ function switchConversation(id) {
 
 function renderConvs() {
   var l = document.getElementById('convList'), ids = Object.keys(conversations);
-  if (!ids.length) { l.innerHTML = '<div class="text-center py-6 text-[#666] text-xs">No conversations yet</div>'; return; }
+  var filter = (document.getElementById('convSearch').value || '').toLowerCase();
+  if (filter) ids = ids.filter(function(id) { return conversations[id].title.toLowerCase().includes(filter); });
+  if (!ids.length) { l.innerHTML = '<div class="text-center py-6 text-[#666] text-xs">' + (filter ? 'No matches' : 'No conversations yet') + '</div>'; return; }
   l.innerHTML = ids.map(function(id) {
     var c = conversations[id], active = id === activeConvId;
     return '<div class="conv-item px-3 py-2.5 rounded-lg cursor-pointer text-xs transition mb-0.5 flex items-center justify-between group' + (active ? ' bg-surface' : ' hover:bg-surface') + '" onclick="switchConversation(\'' + id + '\')">' +
@@ -240,7 +336,8 @@ function handleEvent(d, b, st, chat) {
       completedAgents = totalAgents;
       updateProgress();
       setConnected(false);
-      b.innerHTML = '<strong>Complete.</strong> ' + (d.results ? d.results.filter(function(r) { return r.state === 'completed'; }).length : 0) + '/' + (d.results ? d.results.length : 0) + ' agents finished.';
+      var doneMsg = '<strong>Task complete</strong><br>' + (d.results ? d.results.filter(function(r) { return r.state === 'completed'; }).length : 0) + '/' + (d.results ? d.results.length : 0) + ' agents finished';
+      b.innerHTML = doneMsg;
       if (d.summary) {
         var s = document.createElement('div');
         s.className = 'mt-3 p-3.5 bg-[#0a0a0a] rounded-lg text-xs leading-relaxed whitespace-pre-wrap max-h-[500px] overflow-y-auto';
@@ -249,6 +346,8 @@ function handleEvent(d, b, st, chat) {
       }
       document.getElementById('submitBtn').disabled = false;
       if (eventSource) eventSource.close();
+      var taskTitle = conversations[activeConvId] ? conversations[activeConvId].title : 'Task';
+      showToast('<div class="font-medium text-xs text-green">✓ Complete</div><div class="text-[10px] text-[#999] mt-0.5">' + esc(taskTitle) + '</div>');
       agentStates = {};
       break;
     case 'error':
@@ -297,7 +396,7 @@ function renderStepper(st, d) {
     sp.className = 'step flex items-center gap-3 px-3 py-2.5 rounded-lg transition hover:bg-[rgba(255,255,255,0.02)] cursor-default pending';
     sp.id = 'step-' + s2.id;
     sp.innerHTML = '<div class="step-dot w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] border-2 border-border text-[#666]">' + (parseInt(s2.id.replace('t', '')) || '') + '</div><div class="flex-1 min-w-0"><div class="text-xs font-medium">' + s2.name.replace(/_/g, ' ') + '</div><div class="text-[10px] text-[#666] mt-0.5">G' + (gIdx + 1) + ' · ' + s2.tools.join(', ') + '</div></div>';
-    sp.addEventListener('click', function(tid) { return function() { toggleStepDetail(tid); }; }(s2.id));
+    sp.addEventListener('click', function(tid) { return function() { openAgentPanel(tid); }; }(s2.id));
     ss.appendChild(sp);
   }
   bl.appendChild(ss);
