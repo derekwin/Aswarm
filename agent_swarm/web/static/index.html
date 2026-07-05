@@ -34,6 +34,7 @@
         <button class="header-btn" id="themeBtn" onclick="UI.toggleTheme()" title="Toggle theme">☀️</button>
         <button class="header-btn" id="langBtn" onclick="UI.toggleLang()" style="font-size:0.75rem">中</button>
         <button class="header-btn" onclick="UI.openSettings()" title="Settings">⚙</button>
+        <button class="header-btn" onclick="UI.toggleMonitor()" title="Live Monitor">◫</button>
         <span class="conn-dot off" id="connDot" title="Disconnected"></span>
         <span class="model-badge">qwen3.5:35b</span>
       </div>
@@ -89,6 +90,23 @@
     <div class="form-group"><label class="form-label">Decomposer Model</label><input class="form-input" id="cfgDecomposer"></div>
     <div class="form-group"><label class="form-label">Default Agent Model</label><input class="form-input" id="cfgDefaultModel"></div>
     <button class="form-submit" onclick="UI.saveSettings()" data-i18n="save">Save</button>
+  </div>
+</div>
+
+<!-- Live Monitor Panel -->
+<div class="live-monitor" id="liveMonitor">
+  <div class="monitor-toggle" onclick="UI.toggleMonitor()" id="monitorToggle">
+    <span>◀</span>
+  </div>
+  <div class="monitor-inner">
+    <div class="monitor-header">
+      <h3>Live Monitor</h3>
+      <span class="monitor-summary" id="monitorSummary"></span>
+    </div>
+    <div class="monitor-progress" id="monitorProgressBar"><div class="monitor-progress-fill" id="monitorProgressFill"></div></div>
+    <div class="monitor-agents" id="monitorAgents"></div>
+    <div class="monitor-divider">Activity Log</div>
+    <div class="monitor-log" id="monitorLog"></div>
   </div>
 </div>
 

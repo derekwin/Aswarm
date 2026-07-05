@@ -207,9 +207,60 @@ const UI = {
   },
 
   // ── Bubbles ──
+  // ── Live Monitor ──
+  toggleMonitor() { D("liveMonitor").classList.toggle("open"); },
+  addLogEntry(agentName, action, category) {
+    const log = D("monitorLog");
+    const entry = document.createElement("div");
+    entry.className = "monitor-log-entry " + category;
+    entry.innerHTML = '<span class="log-agent">' + Utils.esc(agentName) + '</span> <span class="log-action">' + Utils.esc(action) + '</span>';
+    log.prepend(entry);
+    if (log.children.length > 50) log.lastChild.remove();
+  },
+  updateMonitorAgent(subtaskId, name, state, action) {
+    const list = D("monitorAgents");
+    let card = D("ma-" + subtaskId);
+    if (!card) {
+      card = document.createElement("div"); card.className = "monitor-agent-card"; card.id = "ma-" + subtaskId;
+      card.innerHTML = '<div class="monitor-agent-icon">' + subtaskId.replace("t","") + '</div><div class="monitor-agent-info"><div class="monitor-agent-name">' + Utils.esc(name || subtaskId) + '</div><div class="monitor-agent-action"></div></div>';
+      list.appendChild(card);
+    }
+    card.className = "monitor-agent-card " + state;
+    card.querySelector(".monitor-agent-icon").textContent = state === "completed" ? "✓" : state === "failed" ? "✗" : subtaskId.replace("t","");
+    card.querySelector(".monitor-agent-action").textContent = action || "";
+    // Update summary
+    const total = State.totalAgents, done = Object.values(State.agentStates).filter(s => s.state === "completed" || s.state === "failed").length;
+    D("monitorSummary").textContent = done + "/" + total;
+    if (D("liveMonitor").classList.contains("open")) {
+      D("monitorProgressFill").style.width = (total ? Math.round(done/total*100) : 0) + "%";
+    }
+  },
+
+  // ── Edit & Re-run ──
   _userBubble(content) {
-    return '<div class="fade-up message user"><div class="bubble user">' + Utils.esc(content) +
-      '</div><div class="avatar user">U</div></div>';
+    const id = "ub-" + Date.now();
+    return '<div class="user-bubble-wrapper fade-up" id="' + id + '"><div class="message user"><div class="bubble user">' + Utils.esc(content) +
+      '</div><div class="avatar user">U</div></div>' +
+      '<div class="bubble-actions"><button class="bubble-action-btn" onclick="UI.editMessage(\'' + id + '\')">✎</button></div></div>';
+  },
+  editMessage(id) {
+    const wrapper = D(id), bubble = wrapper.querySelector(".bubble");
+    const text = bubble.textContent;
+    bubble.innerHTML = '<textarea class="edit-input" id="edit-' + id + '" rows="3">' + Utils.esc(text) + '</textarea>' +
+      '<div class="edit-actions"><button class="save-btn" onclick="UI.saveEdit(\'' + id + '\')">Re-run</button><button class="cancel-btn" onclick="UI.cancelEdit(\'' + id + '\')">Cancel</button></div>';
+    const ta = D("edit-" + id); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+  },
+  saveEdit(id) {
+    const text = D("edit-" + id).value.trim(); if (!text) return;
+    const wrapper = D(id);
+    wrapper.querySelector(".bubble").innerHTML = Utils.esc(text);
+    // Re-submit
+    D("queryInput").value = text;
+    UI.submitTask();
+  },
+  cancelEdit(id) {
+    const wrapper = D(id);
+    wrapper.querySelector(".bubble").innerHTML = Utils.esc(wrapper.querySelector(".bubble").querySelector("textarea")?.value || wrapper.querySelector(".bubble").textContent);
   },
   _assistantBubble(content, id) {
     return '<div class="fade-up message assistant" id="' + (id || "") + '"><div class="avatar assistant">S</div>' +
@@ -258,10 +309,15 @@ const UI = {
         bubble.innerHTML = I18n.t("decomposing") + ' <strong>' + data.subtasks.length + ' ' + I18n.t("agents") + '</strong> across <strong>' + data.parallel_groups.length + ' ' + I18n.t("groups") + '</strong>.';
         this.loadMermaid(() => UI.renderStepper(aid, data));
         break;
-      case "agent_start": State.agentStates[data.subtask_id] = { state: "running", name: data.agent_name, role: data.role }; UI.updateStep(data.subtask_id); break;
+      case "agent_start":
+        State.agentStates[data.subtask_id] = { state: "running", name: data.agent_name, role: data.role };
+        UI.updateStep(data.subtask_id);
+        UI.updateMonitorAgent(data.subtask_id, data.agent_name, "running", "Started");
+        break;
       case "agent_done":
         State.agentStates[data.subtask_id] = { state: data.state, name: State.agentStates[data.subtask_id]?.name || data.subtask_id, output: data.output, error: data.error, retry: data.retry_count };
         UI.updateStep(data.subtask_id);
+        UI.updateMonitorAgent(data.subtask_id, State.agentStates[data.subtask_id]?.name, data.state, data.state);
         if (data.state === "completed" || data.state === "failed") { State.completedAgents++; UI.updateProgress(); }
         break;
       case "done":
