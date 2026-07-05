@@ -60,13 +60,12 @@ export default function ChatArea() {
           <div className={'avatar ' + m.role}>{m.role === 'user' ? 'U' : 'S'}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             {editingIdx === i ? (
-              <div className={'bubble ' + m.role} style={{ padding: 0, background: 'transparent', border: 'none' }}>
+              <div className={'bubble ' + m.role}>
                 <textarea
                   className="edit-input"
                   value={editText}
-                  onChange={e => setEditText(e.target.value)}
-                  rows={Math.min(editText.split('\n').length + 1, 8)}
-                  style={{ width: '100%', minHeight: 60 }}
+                  onChange={e => { setEditText(e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px' }}
+                  style={{ width: '100%', minHeight: 40, border: 'none', background: 'transparent', color: 'inherit', font: 'inherit', fontSize: 'inherit', resize: 'none', outline: 'none', padding: 0 }}
                   autoFocus
                   onKeyDown={e => { if (e.key === 'Escape') cancelEdit(); if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') submitEdit() }}
                 />
