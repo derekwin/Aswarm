@@ -65,7 +65,7 @@ export default function ChatArea() {
                   className="edit-input"
                   value={editText}
                   onChange={e => { setEditText(e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px' }}
-                  style={{ width: '100%', minHeight: 40, border: 'none', background: 'transparent', color: 'inherit', font: 'inherit', fontSize: 'inherit', resize: 'none', outline: 'none', padding: 0 }}
+                  style={{ width: '100%', minWidth: 200, minHeight: 40, border: 'none', background: 'transparent', color: 'inherit', font: 'inherit', fontSize: 'inherit', resize: 'none', outline: 'none', padding: 0, boxSizing: 'border-box' }}
                   autoFocus
                   onKeyDown={e => { if (e.key === 'Escape') cancelEdit(); if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') submitEdit() }}
                 />
