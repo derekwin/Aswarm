@@ -130,7 +130,7 @@ export default function App() {
       if (eventSourceRef.current) eventSourceRef.current.close()
       dispatch({ type: 'SET_CONNECTED', payload: true })
       dispatch({ type: 'SET_CONV_META', payload: { id: convId, meta: { running: true } } })
-      // dispatch({ type: 'SET_MONITOR', payload: true })  // disabled for debug
+      dispatch({ type: 'SET_MONITOR', payload: true })
 
       eventSourceRef.current = new EventSource('/stream/' + task_id)
       eventSourceRef.current.onmessage = (e) => {
