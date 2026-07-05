@@ -108,27 +108,6 @@ function mdRender(text) {
     .replace(/\n/g,'<br>')
 }
 
-
-function DAGView({ data }) {
-  const [svg, setSvg] = useState('')
-  useEffect(() => {
-    const render = () => {
-      try {
-        let mm = 'graph LR\n'
-        const colors = ['#6c5ce7','#00d26a','#f5a623','#f93a3a']
-        data.parallel_groups.forEach((g, gi) => {
-          mm += `  subgraph G${gi+1}[Group ${gi+1}]\n    style G${gi+1} fill:#1e1e24,stroke:${colors[gi%4]}\n`
-          g.forEach(tid => {
-            const s = data.subtasks?.find(x => x.id === tid) || {}
-            const label = mermaidSafe(s.name || tid, 20)
-            mm += `    ${tid}["${label}"]\n`
-          })
-          mm += '  end\n'
-        })
-        data.subtasks?.forEach(s => s.depends_on?.forEach(d => mm += `  ${d} --> ${s.id}\n`))
-        if (window.mermaid) window.mermaid.render('dag-' + Date.now(), mm).then(r => setSvg(r.svg))
-      } catch (e) { console.error('Mermaid render error:', e) }
-    }
     if (!window.mermaid) {
       const s = document.createElement('script'); s.src = '/static/mermaid.min.js'
       s.onload = () => { window.mermaid?.initialize({ startOnLoad: true, theme: 'dark' }); render() }

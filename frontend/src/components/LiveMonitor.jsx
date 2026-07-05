@@ -1,6 +1,6 @@
 import { useApp } from '../App'
 import { useState, useEffect, useCallback } from 'react'
-
+import DAGView from './DAGView'
 export default function LiveMonitor() {
   const { state, dispatch, setMonitorWidth, t } = useApp()
   const [tab, setTab] = useState('agents')
