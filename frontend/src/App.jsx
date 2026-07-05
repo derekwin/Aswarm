@@ -223,7 +223,7 @@ export default function App() {
           <ChatArea />
           {hasConvs && <InputArea />}
         </main>
-        {/* {state.monitorOpen && <LiveMonitor />} */}
+        {state.monitorOpen && <LiveMonitor />}
       </div>
       {state.settingsOpen && <SettingsModal />}
       <AgentPanel />
