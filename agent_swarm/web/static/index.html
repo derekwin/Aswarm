@@ -6,7 +6,22 @@
 <title>AgentSwarm</title>
 <link rel="stylesheet" href="/static/tailwind.min.css">
 <style>
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+:root {
+  --bg: #0d0d0d; --sidebar-bg: #0a0a0a; --surface: #161616; --border: #262626;
+  --text: #ececec; --text-secondary: #999; --text-tertiary: #666;
+  --accent: #6c5ce7; --accent-glow: rgba(108,92,231,0.15);
+}
+.light {
+  --bg: #fafafa; --sidebar-bg: #f0f0f0; --surface: #fff; --border: #e5e5e5;
+  --text: #1a1a1a; --text-secondary: #666; --text-tertiary: #999;
+  --accent: #6c5ce7; --accent-glow: rgba(108,92,231,0.1);
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; -webkit-font-smoothing: antialiased; background: var(--bg); color: var(--text); }
+.bg-accent { background: var(--accent) !important; }
+.bg-surface { background: var(--surface) !important; }
+.border-border { border-color: var(--border) !important; }
+.text-accent { color: var(--accent) !important; }
+.from-accent { --tw-gradient-from: var(--accent); }
 .step-dot { transition: all 0.2s ease; }
 .step-running .step-dot { animation: pulse-dot 1.2s infinite; }
 @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
@@ -31,7 +46,30 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
 .agent-panel.open { transform: translateX(0); }
 </style>
 </head>
-<body class="bg-[#0d0d0d] text-[#ececec] h-screen flex overflow-hidden">
+<body class="h-screen flex overflow-hidden" style="background:var(--bg);color:var(--text)">
+
+<!-- Settings Modal -->
+<div id="settingsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60" onclick="closeSettings(event)">
+  <div class="w-full max-w-md mx-4 bg-[var(--surface)] border border-[var(--border)] rounded-2xl shadow-2xl p-6" onclick="event.stopPropagation()" style="background:var(--surface);border-color:var(--border)">
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="text-lg font-semibold" data-i18n="settings">Settings</h2>
+      <button onclick="closeSettings()" class="p-1 rounded-lg hover:bg-[var(--border)] transition" style="color:var(--text-secondary)">✕</button>
+    </div>
+    <div class="space-y-4">
+      <div><label class="text-xs text-[var(--text-secondary)] block mb-1" data-i18n="llm_base_url">LLM Base URL</label>
+        <input id="cfgBaseUrl" class="w-full px-3 py-2 rounded-lg text-sm" style="background:var(--bg);border:1px solid var(--border);color:var(--text)"></div>
+      <div><label class="text-xs text-[var(--text-secondary)] block mb-1" data-i18n="llm_api_key">API Key</label>
+        <input id="cfgApiKey" class="w-full px-3 py-2 rounded-lg text-sm" style="background:var(--bg);border:1px solid var(--border);color:var(--text)"></div>
+      <div><label class="text-xs text-[var(--text-secondary)] block mb-1" data-i18n="classifier_model">Classifier Model</label>
+        <input id="cfgClassifier" class="w-full px-3 py-2 rounded-lg text-sm" style="background:var(--bg);border:1px solid var(--border);color:var(--text)"></div>
+      <div><label class="text-xs text-[var(--text-secondary)] block mb-1" data-i18n="decomposer_model">Decomposer Model</label>
+        <input id="cfgDecomposer" class="w-full px-3 py-2 rounded-lg text-sm" style="background:var(--bg);border:1px solid var(--border);color:var(--text)"></div>
+      <div><label class="text-xs text-[var(--text-secondary)] block mb-1" data-i18n="default_model">Default Agent Model</label>
+        <input id="cfgDefaultModel" class="w-full px-3 py-2 rounded-lg text-sm" style="background:var(--bg);border:1px solid var(--border);color:var(--text)"></div>
+      <button onclick="saveSettings()" class="w-full py-2.5 rounded-xl text-white text-sm font-semibold transition" style="background:var(--accent)" data-i18n="save">Save</button>
+    </div>
+  </div>
+</div>
 
 <!-- Command Palette -->
 <div id="cmdPalette" class="cmd-palette fixed inset-0 z-50 items-start justify-center pt-[15vh]" onclick="closePalette(event)">
@@ -75,8 +113,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
       <h3 id="convTitle" class="text-sm font-semibold tracking-tight">New Task</h3>
     </div>
     <div class="flex items-center gap-3">
+      <button onclick="toggleTheme()" class="p-1.5 rounded-lg hover:bg-[var(--border)] transition text-sm" title="Toggle theme" id="themeBtn">☀️</button>
+      <button onclick="toggleLang()" class="px-2 py-1 rounded-lg hover:bg-[var(--border)] transition text-xs" id="langBtn" style="color:var(--text-secondary)">中</button>
+      <button onclick="openSettings()" class="p-1.5 rounded-lg hover:bg-[var(--border)] transition" title="Settings" style="color:var(--text-secondary)">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M2.5 8h2M11.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>
+      </button>
       <span id="connDot" class="w-1.5 h-1.5 rounded-full bg-[#333]" title="Disconnected"></span>
-      <span class="text-[10px] sm:text-xs px-2 sm:px-3 py-1 sm:py-1.5 bg-surface border border-border rounded-full text-[#999] hidden sm:inline">qwen3.5:35b</span>
+      <span class="text-[10px] sm:text-xs px-2 sm:px-3 py-1 sm:py-1.5 border rounded-full hidden sm:inline" style="background:var(--surface);border-color:var(--border);color:var(--text-secondary)" data-i18n="model_badge">qwen3.5:35b</span>
     </div>
   </header>
 
@@ -111,6 +154,92 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
 <script>
 var conversations = {}, activeConvId = null, eventSource = null, agentStates = {};
 var totalAgents = 0, completedAgents = 0;
+var lang = localStorage.getItem('lang') || 'en';
+var isDark = localStorage.getItem('theme') !== 'light';
+
+// ── i18n ──
+var T = {
+  en: {
+    newTask: 'New Task', send: 'Send', settings: 'Settings',
+    llm_base_url: 'LLM Base URL', llm_api_key: 'API Key',
+    classifier_model: 'Classifier Model', decomposer_model: 'Decomposer Model',
+    default_model: 'Default Agent Model', save: 'Save',
+    model_badge: 'qwen3.5:35b', no_convs: 'No conversations yet',
+    search_conv: 'Search conversations...', task_placeholder: 'Describe your task...',
+    empty_title: 'What do you want to research?',
+    empty_desc: 'Describe your task. AgentSwarm decomposes it, spawns specialized agents, and executes them in parallel.',
+    classifying: 'Classifying task', decomposing: 'Decomposing',
+    executing: 'Executing agents', connected: 'Connected', disconnected: 'Disconnected',
+    delete_confirm: 'Delete this conversation?', load_error: 'Connection lost.',
+    server_error: 'Server error.', complete: 'Complete',
+    agents_finished: ' agents finished.',
+  },
+  zh: {
+    newTask: '新建任务', send: '发送', settings: '设置',
+    llm_base_url: 'LLM 接口地址', llm_api_key: 'API 密钥',
+    classifier_model: '分类模型', decomposer_model: '分解模型',
+    default_model: '默认 Agent 模型', save: '保存',
+    model_badge: 'qwen3.5:35b', no_convs: '暂无对话',
+    search_conv: '搜索对话...', task_placeholder: '描述你的任务...',
+    empty_title: '想要研究什么？',
+    empty_desc: '描述你的任务。AgentSwarm 会拆解任务，生成专门 Agent，并行执行。',
+    classifying: '正在分类任务', decomposing: '正在拆解任务',
+    executing: '正在执行 Agent', connected: '已连接', disconnected: '已断开',
+    delete_confirm: '确定删除此对话？', load_error: '连接已断开。',
+    server_error: '服务器错误。', complete: '完成',
+    agents_finished: ' 个 Agent 完成。',
+  }
+};
+function t(key) { return (T[lang] || T.en)[key] || key; }
+
+// ── Theme ──
+function applyTheme() {
+  document.documentElement.classList.toggle('light', !isDark);
+  document.getElementById('themeBtn').textContent = isDark ? '☀️' : '🌙';
+  localStorage.setItem('theme', isDark ? 'dark' : 'light');
+}
+function toggleTheme() { isDark = !isDark; applyTheme(); }
+
+// ── Language ──
+function applyLang() {
+  document.getElementById('langBtn').textContent = lang === 'zh' ? 'EN' : '中';
+  document.querySelectorAll('[data-i18n]').forEach(function(el) {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.getElementById('queryInput').placeholder = t('task_placeholder');
+  document.getElementById('convSearch').placeholder = t('search_conv');
+  document.getElementById('convTitle').textContent = t('newTask');
+  // Re-render UI
+  document.getElementById('chatArea').innerHTML = conversations[activeConvId] && conversations[activeConvId].msgs && conversations[activeConvId].msgs.length
+    ? (conversations[activeConvId]._html || conversations[activeConvId].msgs.join(''))
+    : emptyStateHTML();
+  renderConvs();
+}
+function toggleLang() { lang = lang === 'zh' ? 'en' : 'zh'; localStorage.setItem('lang', lang); applyLang(); }
+
+// ── Settings ──
+function openSettings() {
+  fetch('/api/settings').then(function(r){return r.json();}).then(function(d){
+    document.getElementById('cfgBaseUrl').value = d.llm_base_url || '';
+    document.getElementById('cfgApiKey').value = d.llm_api_key || '';
+    document.getElementById('cfgClassifier').value = d.classifier_model || '';
+    document.getElementById('cfgDecomposer').value = d.decomposer_model || '';
+    document.getElementById('cfgDefaultModel').value = d.default_model || '';
+    document.getElementById('settingsModal').classList.remove('hidden');
+  });
+}
+function closeSettings(e) { if (e && e.target !== document.getElementById('settingsModal')) return; document.getElementById('settingsModal').classList.add('hidden'); }
+function saveSettings() {
+  var data = {
+    llm_base_url: document.getElementById('cfgBaseUrl').value,
+    llm_api_key: document.getElementById('cfgApiKey').value,
+    classifier_model: document.getElementById('cfgClassifier').value,
+    decomposer_model: document.getElementById('cfgDecomposer').value,
+    default_model: document.getElementById('cfgDefaultModel').value,
+  };
+  fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+    .then(function() { closeSettings(); showToast('✓ ' + t('save') + 'd'); });
+}
 
 // Keyboard shortcuts
 document.addEventListener('keydown', function(e) {
@@ -189,6 +318,7 @@ function emptyStateHTML(sm) {
 }
 
 function init() {
+  applyTheme(); applyLang();
   loadConversations();
 }
 

@@ -22,9 +22,46 @@ app = FastAPI(title="AgentSwarm Dashboard")
 storage = get_storage()
 
 STATIC_DIR = Path(__file__).parent / "static"
+SETTINGS_FILE = Path("data/settings.json")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 _streams: dict[str, asyncio.Queue] = {}
+
+_default_settings = {
+    "llm_base_url": "http://localhost:11434/v1",
+    "llm_api_key": "ollama",
+    "classifier_model": "qwen3:4b",
+    "decomposer_model": "qwen3.5:35b",
+    "default_model": "qwen3.5:35b",
+}
+
+
+def _load_settings() -> dict:
+    if SETTINGS_FILE.exists():
+        return {**_default_settings, **json.loads(SETTINGS_FILE.read_text())}
+    return dict(_default_settings)
+
+
+def _save_settings(data: dict):
+    SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    SETTINGS_FILE.write_text(json.dumps(data, indent=2))
+
+
+# ── Settings API ──
+
+@app.get("/api/settings")
+async def get_settings():
+    return _load_settings()
+
+
+@app.put("/api/settings")
+async def update_settings(data: dict):
+    current = _load_settings()
+    for k in _default_settings:
+        if k in data and data[k]:
+            current[k] = data[k]
+    _save_settings(current)
+    return current
 
 
 def _push_event(task_id: str, event: dict):
@@ -109,18 +146,19 @@ async def _event_stream_empty():
 
 async def _execute_task(task_id: str, conv_id: str, query: str):
     try:
+        settings = _load_settings()
         gateway = MCPGateway()
-        factory = AgentFactory(gateway=gateway, default_model="qwen3.5:35b")
+        factory = AgentFactory(gateway=gateway, default_model=settings["default_model"])
         state_manager = StateManager()
 
         scheduler = MetaScheduler(
-            base_url="http://localhost:11434/v1", api_key="ollama",
-            classifier_model="qwen3:4b", decomposer_model="qwen3.5:35b",
+            base_url=settings["llm_base_url"], api_key=settings["llm_api_key"],
+            classifier_model=settings["classifier_model"], decomposer_model=settings["decomposer_model"],
         )
 
         orchestrator = SwarmOrchestrator(
             gateway=gateway, factory=factory, state_manager=state_manager,
-            llm_base_url="http://localhost:11434/v1", llm_api_key="ollama",
+            llm_base_url=settings["llm_base_url"], llm_api_key=settings["llm_api_key"],
             max_subtask_retries=2,
         )
 
