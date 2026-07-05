@@ -84,7 +84,6 @@ class TestSwarmOrchestrator:
         factory = AgentFactory(gateway=gateway)
         orchestrator = SwarmOrchestrator(
             tools=tools, factory=factory, state_manager=state_manager, llm=llm,
-            judge_model=None,
         )
 
         async def mock_run_agent(subtask_id, agent, prompt, context):
@@ -108,7 +107,6 @@ class TestSwarmOrchestrator:
         factory = AgentFactory(gateway=gateway)
         orchestrator = SwarmOrchestrator(
             tools=tools, factory=factory, state_manager=state_manager, llm=llm,
-            judge_model=None,
         )
 
         # Pre-populate a checkpoint (simulate group 1 completed)

@@ -7,7 +7,6 @@ import logging
 from agent_swarm.models import (
     TaskDAG, SwarmState, SubtaskResult, SubtaskState, Subtask, AgentConfig
 )
-from agent_swarm.mcp_gateway import MCPGateway
 from agent_swarm.agent_factory import AgentFactory, Agent
 from agent_swarm.state_manager import StateManager
 from agent_swarm.context import get_context
@@ -22,16 +21,6 @@ RETRYABLE_ERRORS = (
     ConnectionRefusedError,
     ConnectionResetError,
 )
-
-JUDGE_SYSTEM_PROMPT = """You are a quality evaluator. Judge whether an Agent's output meets requirements.
-Respond in English only.
-
-Evaluation criteria:
-- Information density: does the output contain substantive content (specific data, facts, names, numbers) — not vague descriptions or "no data found"
-- Task completion: does the output address the task requirements with concrete information
-- Action evidence: does the output show the agent took real action (searched, coded, analyzed) — summaries and analysis ARE valid output formats. Do NOT penalize for lacking explicit source citations or search queries in the output text.
-
-Return JSON: {"pass": true/false, "reason": "one sentence explaining why"}"""
 
 
 class ResultAggregator:
@@ -74,14 +63,12 @@ class SwarmOrchestrator:
         state_manager: StateManager,
         llm: LLMClient,
         max_subtask_retries: int = 2,
-        judge_model: str = None,
     ):
         self.tools = tools
         self.factory = factory
         self.state_manager = state_manager
         self.llm = llm
         self.max_subtask_retries = max_subtask_retries
-        self.judge_model = judge_model
         self.aggregator = ResultAggregator()
 
     # ── LLM / Tool helpers ──
@@ -147,33 +134,19 @@ class SwarmOrchestrator:
                     result.retry_count += attempt
                     old = results.get(sid)
                     if old:
-                        result.retry_history = old.retry_history + [f"Attempt {attempt}: JUDGE={self._judge_summary(result)}"]
+                        result.retry_history = old.retry_history + [f"Attempt {attempt}: {result.state.value}"]
                         if result.state == SubtaskState.FAILED and not result.error and old.error:
-                            result.error = old.error  # preserve previous error info
+                            result.error = old.error
                     results[sid] = result
 
-                # Evaluate and determine which need retry
-                pending_ids = []
-                if self.judge_model:
-                    for sid, result in results.items():
-                        if result.state == SubtaskState.FAILED and attempt < self.max_subtask_retries:
-                            pending_ids.append(sid)
-                            logger.warning(f"  [{sid}] FAILED → will retry")
-                        elif result.state == SubtaskState.COMPLETED:
-                            passed, reason = await self._evaluate_output(
-                                self._find_subtask(dag, sid).prompt, result.output or ""
-                            )
-                            if not passed and attempt < self.max_subtask_retries:
-                                pending_ids.append(sid)
-                                logger.warning(f"  [{sid}] QUALITY LOW ({reason}) → will retry")
-                            else:
-                                logger.info(f"  [{sid}] Quality check: {'PASS' if passed else 'MAX RETRIES'}")
-                else:
-                    # No judge model → only retry FAILED
-                    pending_ids = [
-                        sid for sid, r in results.items()
-                        if r.state == SubtaskState.FAILED and attempt < self.max_subtask_retries
-                    ]
+                # Only retry FAILED subtasks (no quality gate — agents self-correct)
+                pending_ids = [
+                    sid for sid, r in results.items()
+                    if r.state == SubtaskState.FAILED and attempt < self.max_subtask_retries
+                ]
+                if pending_ids:
+                    for sid in pending_ids:
+                        logger.warning(f"  [{sid}] FAILED → will retry")
 
             for sid, result in list(results.items()):
                 if result.state == SubtaskState.FAILED:
@@ -202,20 +175,6 @@ class SwarmOrchestrator:
 
     # ─── Quality Gate ───
 
-    async def _evaluate_output(self, task_prompt: str, output: str) -> tuple[bool, str]:
-        user_prompt = f"Task requirement: {task_prompt[:300]}\n\nAgent output: {output[:600]}"
-        try:
-            msg = await self._call_llm(
-                self.judge_model,
-                [{"role": "system", "content": JUDGE_SYSTEM_PROMPT}, {"role": "user", "content": user_prompt}],
-                temperature=0.1,
-            )
-            raw = (msg.content if hasattr(msg, 'content') else msg.get('content', '')) or '{"pass":true,"reason":"parse error"}'
-            parsed = json.loads(raw)
-            return parsed.get("pass", True), parsed.get("reason", "")
-        except Exception:
-            return True, ""  # judge failed → let it pass
-
     @staticmethod
     def _regenerate_prompt(original: str, prev_result: SubtaskResult, attempt: int) -> str:
         prev_output = (prev_result.output or "")[:200]
@@ -230,16 +189,6 @@ class SwarmOrchestrator:
             return f"[Attempt {attempt + 1}]\n{original}\n\nPrevious issues: {'; '.join(notes)}\nRetry with a different approach."
         return original
 
-    @staticmethod
-    def _judge_summary(result: SubtaskResult) -> str:
-        if result.state == SubtaskState.FAILED:
-            return f"FAILED: {result.error or 'unknown'}"
-        return f"COMPLETED ({len(result.output or '')} chars)"
-
-    # ─── Agent 执行 ───
-
-    MAX_SEARCH_ROUNDS = 4  # hard limit: force output after this many searches
-
     async def _replan_subtask(self, dag: TaskDAG, subtask, failed_result: SubtaskResult):
         """Generate a replacement subtask when the original fails after max retries."""
         try:
@@ -253,7 +202,7 @@ class SwarmOrchestrator:
                 "\"system_prompt\": \"...\", \"tools\": [\"tool1\"], \"prompt\": \"new task prompt\"}"
             )
             msg = await self._call_llm(
-                self.judge_model,
+                "qwen3:4b",
                 [{"role": "user", "content": replan_prompt}],
                 temperature=0.5,
             )
