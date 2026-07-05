@@ -181,6 +181,8 @@ def _parse_baidu_soup(soup: BeautifulSoup, max_results: int) -> list[tuple[str, 
 
 
 def _try_sandbox_run(cmd: list[str], timeout: int = 60) -> tuple[str, str, bool]:
+    import os as _os
+    tmpdir = _os.environ.get("AGENTSWARM_WORKSPACE", SANDBOX_TMPDIR)
     try:
         from sandlock import Sandbox
         sandbox = Sandbox(
@@ -345,7 +347,9 @@ class MCPGateway:
     @staticmethod
     def _python_handler(code: str, timeout: int = 60) -> str:
         import tempfile
-        os.makedirs(SANDBOX_TMPDIR, exist_ok=True)
+        import os as _os
+        tmpdir = _os.environ.get("AGENTSWARM_WORKSPACE", SANDBOX_TMPDIR)
+        _os.makedirs(tmpdir, exist_ok=True)
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", dir=SANDBOX_TMPDIR, delete=False) as f:
             f.write(code)
             tmp_path = f.name

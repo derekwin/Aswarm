@@ -6,8 +6,10 @@ import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Query, HTTPException, UploadFile, File
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+import os
+import shutil
 
 from agent_swarm import (
     MetaScheduler, SwarmOrchestrator, AgentFactory,
@@ -23,6 +25,8 @@ storage = get_storage()
 
 STATIC_DIR = Path(__file__).parent / "static"
 SETTINGS_FILE = Path("data/settings.json")
+WORKSPACE_ROOT = Path("data/workspaces")
+WORKSPACE_ROOT.mkdir(parents=True, exist_ok=True)
 app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -104,7 +108,51 @@ async def get_conversation(conv_id: str):
 @app.delete("/api/conversations/{conv_id}")
 async def delete_conversation(conv_id: str):
     storage.delete_conversation(conv_id)
+    # Clean up workspace
+    ws = WORKSPACE_ROOT / conv_id
+    if ws.exists():
+        shutil.rmtree(ws)
     return {"ok": True}
+
+
+# ── Workspace API ──
+
+@app.get("/api/workspace/{conv_id}")
+async def list_workspace(conv_id: str):
+    ws = WORKSPACE_ROOT / conv_id
+    if not ws.exists():
+        return {"files": [], "path": str(ws)}
+    files = []
+    for root, dirs, filenames in os.walk(ws):
+        rel = os.path.relpath(root, ws)
+        if rel == ".": rel = ""
+        for d in dirs:
+            files.append({"name": d, "path": os.path.join(rel, d) if rel else d, "type": "dir", "size": 0})
+        for f in filenames:
+            fp = os.path.join(root, f)
+            files.append({"name": f, "path": os.path.join(rel, f) if rel else f, "type": "file", "size": os.path.getsize(fp)})
+    files.sort(key=lambda x: (x["type"] != "dir", x["name"]))
+    return {"files": files, "path": str(ws)}
+
+
+@app.get("/api/workspace/{conv_id}/file")
+async def read_workspace_file(conv_id: str, path: str = ""):
+    fp = WORKSPACE_ROOT / conv_id / path
+    if not fp.exists() or not fp.is_file():
+        raise HTTPException(404, "File not found")
+    try:
+        content = fp.read_text(encoding="utf-8", errors="replace")
+        return {"path": path, "content": content[:100000], "size": fp.stat().st_size}
+    except Exception:
+        return {"path": path, "content": "[Binary file - cannot preview]", "size": fp.stat().st_size, "binary": True}
+
+
+@app.get("/api/workspace/{conv_id}/download")
+async def download_workspace_file(conv_id: str, path: str = ""):
+    fp = WORKSPACE_ROOT / conv_id / path
+    if not fp.exists() or not fp.is_file():
+        raise HTTPException(404, "File not found")
+    return FileResponse(fp, filename=os.path.basename(path))
 
 
 # ── File Upload ──
@@ -170,6 +218,11 @@ async def _event_stream_empty():
 async def _execute_task(task_id: str, conv_id: str, query: str):
     try:
         settings = _load_settings()
+        # Ensure workspace directory exists
+        ws = WORKSPACE_ROOT / conv_id
+        ws.mkdir(parents=True, exist_ok=True)
+        os.environ["AGENTSWARM_WORKSPACE"] = str(ws)
+
         gateway = MCPGateway()
         factory = AgentFactory(gateway=gateway, default_model=settings["default_model"])
         state_manager = StateManager()
