@@ -197,7 +197,8 @@ def _search_bing(query: str, n: int) -> tuple[list, str]:
         results = []
         for li in soup.select("#b_results > li.b_algo, .b_algo"):
             a = li.select_one("h2 a, .b_title a")
-            if not a: continue
+            if not a:
+                continue
             p = li.select_one(".b_caption p, .b_lineclamp2")
             results.append((a.get_text(strip=True), _clean_url(a.get("href", "")), p.get_text(strip=True) if p else ""))
         return results[:n], ""
@@ -211,7 +212,8 @@ def _search_baidu(query: str, n: int) -> tuple[list, str]:
         results = []
         for card in soup.select(".result, .c-container"):
             a = card.select_one("h3 a, .t a")
-            if not a or not a.get("href", "").startswith("http"): continue
+            if not a or not a.get("href", "").startswith("http"):
+                continue
             p = card.select_one(".c-abstract")
             results.append((a.get_text(strip=True), a["href"], p.get_text(strip=True) if p else ""))
         return results[:n], ""
@@ -225,7 +227,8 @@ def _search_sogou(query: str, n: int) -> tuple[list, str]:
         results = []
         for card in soup.select("#main .vrwrap, #main .rb"):
             a = card.select_one("h3 a, .vr-title a")
-            if not a: continue
+            if not a:
+                continue
             p = card.select_one(".str_info, p")
             results.append((a.get_text(strip=True), a.get("href", ""), p.get_text(strip=True) if p else ""))
         return results[:n], ""
