@@ -1,6 +1,5 @@
 """Persistent storage layer using SQLite — conversations, messages, tasks, agent results."""
 
-import json
 import sqlite3
 import threading
 from datetime import datetime, timezone

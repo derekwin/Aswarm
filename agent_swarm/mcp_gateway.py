@@ -186,7 +186,7 @@ def _try_sandbox_run(cmd: list[str], timeout: int = 60) -> tuple[str, str, bool]
     try:
         from sandlock import Sandbox
         sandbox = Sandbox(
-            fs_writable=[SANDBOX_TMPDIR],
+            fs_writable=[tmpdir],
             fs_readable=["/usr", "/lib", "/lib64", "/etc", "/bin", "/tmp"],
             max_memory="512M",
             max_processes=10,
@@ -197,9 +197,9 @@ def _try_sandbox_run(cmd: list[str], timeout: int = 60) -> tuple[str, str, bool]
     except ImportError:
         logger.debug("Sandlock not installed, falling back to subprocess")
         import subprocess
-        os.makedirs(SANDBOX_TMPDIR, exist_ok=True)
+        os.makedirs(tmpdir, exist_ok=True)
         proc = subprocess.run(
-            cmd, capture_output=True, timeout=timeout, cwd=SANDBOX_TMPDIR,
+            cmd, capture_output=True, timeout=timeout, cwd=tmpdir,
         )
         return proc.stdout.decode("utf-8", errors="replace"), proc.stderr.decode("utf-8", errors="replace"), proc.returncode == 0
     except ModuleNotFoundError:

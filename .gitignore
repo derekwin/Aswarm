@@ -7,3 +7,6 @@ dist/
 checkpoints/
 data/
 frontend/node_modules/
+*.md
+!README.md
+!docs/**/*.md

@@ -125,7 +125,8 @@ async def list_workspace(conv_id: str):
     files = []
     for root, dirs, filenames in os.walk(ws):
         rel = os.path.relpath(root, ws)
-        if rel == ".": rel = ""
+        if rel == ".":
+            rel = ""
         for d in dirs:
             files.append({"name": d, "path": os.path.join(rel, d) if rel else d, "type": "dir", "size": 0})
         for f in filenames:
