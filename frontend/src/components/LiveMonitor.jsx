@@ -10,6 +10,7 @@ export default function LiveMonitor() {
 
   const convId = state.activeConvId
   const conv = convId ? state.conversations[convId] : null
+  const agents = Object.values(conv?.agents || {})
   const sortedAgents = [...agents].sort((a, b) => {
     const order = { running: 0, pending: 1, completed: 2, failed: 3 }
     return (order[a.state] || 4) - (order[b.state] || 4)
