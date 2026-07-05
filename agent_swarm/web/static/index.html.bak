@@ -9,7 +9,7 @@
 :root {
   --bg: #0d0d0d; --sidebar-bg: #0a0a0a; --surface: #161616; --border: #262626;
   --text: #ececec; --text-secondary: #999; --text-tertiary: #666;
-  --accent: #6c5ce7; --accent-glow: var(--accent-glow);
+  --accent: #6c5ce7; --accent-glow: rgba(108,92,231,0.15);
 }
 .light {
   --bg: #fafafa; --sidebar-bg: #f0f0f0; --surface: #fff; --border: #e5e5e5;
@@ -50,31 +50,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
 
 <!-- Settings Modal -->
 <div id="settingsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60" onclick="closeSettings(event)">
-  <div class="w-full max-w-md mx-4 rounded-2xl shadow-2xl p-6" style="background:var(--surface);border:1px solid var(--border)" onclick="event.stopPropagation()">
+  <div class="w-full max-w-md mx-4 bg-[var(--surface)] border border-[var(--border)] rounded-2xl shadow-2xl p-6" onclick="event.stopPropagation()" style="background:var(--surface);border-color:var(--border)">
     <div class="flex items-center justify-between mb-5">
       <h2 class="text-lg font-semibold" data-i18n="settings">Settings</h2>
-      <button onclick="closeSettings()" class="p-1 rounded-lg hover:bg-[var(--border)] transition">✕</button>
+      <button onclick="closeSettings()" class="p-1 rounded-lg hover:bg-[var(--border)] transition" style="color:var(--text-secondary)">✕</button>
     </div>
-    <div class="flex gap-1 mb-4 p-1 rounded-xl" style="background:var(--bg)">
-      <button class="flex-1 py-2 text-xs font-medium rounded-lg transition tab-btn active" data-provider="ollama" onclick="switchProvider('ollama')" style="color:var(--text)">Ollama</button>
-      <button class="flex-1 py-2 text-xs font-medium rounded-lg transition tab-btn" data-provider="openai" onclick="switchProvider('openai')" style="color:var(--text-secondary)">OpenAI</button>
-      <button class="flex-1 py-2 text-xs font-medium rounded-lg transition tab-btn" data-provider="anthropic" onclick="switchProvider('anthropic')" style="color:var(--text-secondary)">Anthropic</button>
-    </div>
-    <div class="space-y-4">
-      <div id="fieldBaseUrl"><label class="text-xs block mb-1" style="color:var(--text-secondary)">Base URL</label>
-        <input id="cfgBaseUrl" class="w-full px-3 py-2 rounded-lg text-sm" style="background:var(--bg);border:1px solid var(--border);color:var(--text)"></div>
-      <div id="fieldApiKey" class="hidden"><label class="text-xs block mb-1" style="color:var(--text-secondary)">API Key</label>
-        <input id="cfgApiKey" class="w-full px-3 py-2 rounded-lg text-sm" style="background:var(--bg);border:1px solid var(--border);color:var(--text)"></div>
-      <div><label class="text-xs block mb-1" style="color:var(--text-secondary)">Classifier Model</label>
-        <input id="cfgClassifier" class="w-full px-3 py-2 rounded-lg text-sm" style="background:var(--bg);border:1px solid var(--border);color:var(--text)"></div>
-      <div><label class="text-xs block mb-1" style="color:var(--text-secondary)">Decomposer Model</label>
-        <input id="cfgDecomposer" class="w-full px-3 py-2 rounded-lg text-sm" style="background:var(--bg);border:1px solid var(--border);color:var(--text)"></div>
-      <div><label class="text-xs block mb-1" style="color:var(--text-secondary)">Default Agent Model</label>
-        <input id="cfgDefaultModel" class="w-full px-3 py-2 rounded-lg text-sm" style="background:var(--bg);border:1px solid var(--border);color:var(--text)"></div>
-      <button onclick="saveSettings()" class="w-full py-2.5 rounded-xl text-white text-sm font-semibold transition" style="background:var(--accent)">Save</button>
-    </div>
-  </div>
-</div>
     <div class="space-y-4">
       <div><label class="text-xs text-[var(--text-secondary)] block mb-1" data-i18n="llm_base_url">LLM Base URL</label>
         <input id="cfgBaseUrl" class="w-full px-3 py-2 rounded-lg text-sm" style="background:var(--bg);border:1px solid var(--border);color:var(--text)"></div>
@@ -95,7 +75,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
 <div id="cmdPalette" class="cmd-palette fixed inset-0 z-50 items-start justify-center pt-[15vh]" onclick="closePalette(event)">
   <div class="w-full max-w-lg bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden" onclick="event.stopPropagation()">
     <input id="paletteInput" type="text" placeholder="Search conversations or type a command..."
-      class="w-full px-5 py-4 bg-transparent text-sm text-[var(--text)] placeholder-[var(--text-tertiary)] focus:outline-none border-b border-border"
+      class="w-full px-5 py-4 bg-transparent text-sm text-[#ececec] placeholder-[#666] focus:outline-none border-b border-border"
       oninput="filterPalette()" onkeydown="paletteKeydown(event)">
     <div id="paletteResults" class="max-h-80 overflow-y-auto p-2"></div>
   </div>
@@ -107,20 +87,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
 <!-- Sidebar overlay -->
 <div class="sidebar-overlay hidden fixed inset-0 bg-black/60 z-20 md:hidden" onclick="toggleSidebar()"></div>
 
-<aside id="sidebar" class="w-72 bg-[var(--bg-deeper)] border-r border-border flex flex-col flex-shrink-0 fixed md:static inset-y-0 left-0 z-30 transform -translate-x-full md:translate-x-0 transition-transform duration-300">
+<aside id="sidebar" class="w-72 bg-[#0a0a0a] border-r border-border flex flex-col flex-shrink-0 fixed md:static inset-y-0 left-0 z-30 transform -translate-x-full md:translate-x-0 transition-transform duration-300">
   <div class="p-5 flex items-center gap-3 border-b border-border">
     <div class="w-7 h-7 bg-gradient-to-br from-accent to-[#a78bfa] rounded-lg flex items-center justify-center text-sm flex-shrink-0">⚡</div>
     <h2 class="text-base font-bold tracking-tight truncate">AgentSwarm</h2>
   </div>
-  <button onclick="newConversation(); if(window.innerWidth<768)toggleSidebar()" class="mx-3 mt-3 px-4 py-2.5 rounded-xl border border-border bg-surface hover:border-accent hover:bg-[var(--accent-hover)] text-sm transition flex items-center gap-2">
+  <button onclick="newConversation(); if(window.innerWidth<768)toggleSidebar()" class="mx-3 mt-3 px-4 py-2.5 rounded-xl border border-border bg-surface hover:border-accent hover:bg-[rgba(108,92,231,0.08)] text-sm transition flex items-center gap-2">
     <span class="text-lg leading-none">+</span> New Task
   </button>
   <div class="px-3 pt-2">
     <input id="convSearch" type="text" placeholder="Search conversations..." oninput="renderConvs()"
-      class="w-full px-3 py-1.5 bg-[var(--bg-deeper)] border border-border rounded-lg text-xs text-[var(--text-secondary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-accent transition">
+      class="w-full px-3 py-1.5 bg-[#0a0a0a] border border-border rounded-lg text-xs text-[#999] placeholder-[#555] focus:outline-none focus:border-accent transition">
   </div>
   <div id="convList" class="flex-1 overflow-y-auto p-2">
-    <div class="text-center py-6 text-[var(--text-tertiary)] text-xs">No conversations yet</div>
+    <div class="text-center py-6 text-[#666] text-xs">No conversations yet</div>
   </div>
 </aside>
 
@@ -138,7 +118,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
       <button onclick="openSettings()" class="p-1.5 rounded-lg hover:bg-[var(--border)] transition" title="Settings" style="color:var(--text-secondary)">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M2.5 8h2M11.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>
       </button>
-      <span id="connDot" class="w-1.5 h-1.5 rounded-full bg-[var(--text-tertiary)]" title="Disconnected"></span>
+      <span id="connDot" class="w-1.5 h-1.5 rounded-full bg-[#333]" title="Disconnected"></span>
       <span class="text-[10px] sm:text-xs px-2 sm:px-3 py-1 sm:py-1.5 border rounded-full hidden sm:inline" style="background:var(--surface);border-color:var(--border);color:var(--text-secondary)" data-i18n="model_badge">qwen3.5:35b</span>
     </div>
   </header>
@@ -152,7 +132,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
   <div class="px-3 sm:px-5 lg:px-7 py-3 sm:py-4 border-t border-border flex-shrink-0">
     <div class="flex gap-2 sm:gap-3 max-w-3xl mx-auto items-end">
       <textarea id="queryInput" placeholder="Describe your task..." rows="1"
-        class="flex-1 px-3 sm:px-4 py-3 sm:py-3.5 bg-surface border border-border rounded-xl sm:rounded-2xl text-[var(--text)] text-sm resize-none min-h-[44px] sm:min-h-[48px] max-h-[120px] sm:max-h-[140px] leading-relaxed focus:outline-none focus:border-accent focus:ring-2 sm:focus:ring-4 focus:ring-[var(--accent-glow)] transition"
+        class="flex-1 px-3 sm:px-4 py-3 sm:py-3.5 bg-surface border border-border rounded-xl sm:rounded-2xl text-[#ececec] text-sm resize-none min-h-[44px] sm:min-h-[48px] max-h-[120px] sm:max-h-[140px] leading-relaxed focus:outline-none focus:border-accent focus:ring-2 sm:focus:ring-4 focus:ring-[rgba(108,92,231,0.12)] transition"
         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitTask()}"></textarea>
       <button id="submitBtn" onclick="submitTask()"
         class="px-4 sm:px-6 py-3 sm:py-3.5 bg-accent hover:brightness-110 rounded-xl sm:rounded-2xl text-white font-semibold text-sm transition flex-shrink-0 h-[44px] sm:h-[48px] disabled:opacity-30 disabled:cursor-not-allowed">Send</button>
@@ -161,14 +141,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
 </main>
 
 <!-- Agent detail panel -->
-<div id="agentPanel" class="agent-panel fixed right-0 top-0 bottom-0 w-80 sm:w-96 bg-[var(--bg-deeper)] border-l border-border z-40 flex flex-col">
+<div id="agentPanel" class="agent-panel fixed right-0 top-0 bottom-0 w-80 sm:w-96 bg-[#0a0a0a] border-l border-border z-40 flex flex-col">
   <div class="p-4 border-b border-border flex items-center justify-between">
     <h3 id="panelTitle" class="text-sm font-semibold">Agent Details</h3>
     <button onclick="closeAgentPanel()" class="p-1 rounded-lg hover:bg-surface transition">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg>
     </button>
   </div>
-  <div id="panelContent" class="flex-1 overflow-y-auto p-4 text-xs leading-relaxed text-[var(--text-secondary)] whitespace-pre-wrap"></div>
+  <div id="panelContent" class="flex-1 overflow-y-auto p-4 text-xs leading-relaxed text-[#999] whitespace-pre-wrap"></div>
 </div>
 
 <script>
@@ -238,27 +218,6 @@ function applyLang() {
 function toggleLang() { lang = lang === 'zh' ? 'en' : 'zh'; localStorage.setItem('lang', lang); applyLang(); }
 
 // ── Settings ──
-var curProvider = 'ollama';
-
-function switchProvider(p) {
-  curProvider = p;
-  document.querySelectorAll('.tab-btn').forEach(function(b) {
-    b.classList.toggle('active', b.dataset.provider === p);
-    b.style.background = b.dataset.provider === p ? 'var(--surface)' : '';
-    b.style.color = b.dataset.provider === p ? 'var(--text)' : 'var(--text-secondary)';
-  });
-  document.getElementById('fieldApiKey').classList.toggle('hidden', p === 'ollama');
-  document.getElementById('fieldBaseUrl').classList.toggle('hidden', false);
-  if (p === 'ollama') {
-    document.getElementById('cfgBaseUrl').value = document.getElementById('cfgBaseUrl').value || 'http://localhost:11434/v1';
-    document.getElementById('cfgApiKey').value = 'ollama';
-  } else if (p === 'openai') {
-    document.getElementById('cfgBaseUrl').value = document.getElementById('cfgBaseUrl').value || 'https://api.openai.com/v1';
-  } else if (p === 'anthropic') {
-    document.getElementById('cfgBaseUrl').value = document.getElementById('cfgBaseUrl').value || 'https://api.anthropic.com/v1';
-  }
-}
-
 function openSettings() {
   fetch('/api/settings').then(function(r){return r.json();}).then(function(d){
     document.getElementById('cfgBaseUrl').value = d.llm_base_url || '';
@@ -269,7 +228,7 @@ function openSettings() {
     document.getElementById('settingsModal').classList.remove('hidden');
   });
 }
-
+function closeSettings(e) { if (e && e.target !== document.getElementById('settingsModal')) return; document.getElementById('settingsModal').classList.add('hidden'); }
 function saveSettings() {
   var data = {
     llm_base_url: document.getElementById('cfgBaseUrl').value,
@@ -279,7 +238,7 @@ function saveSettings() {
     default_model: document.getElementById('cfgDefaultModel').value,
   };
   fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
-    .then(function() { closeSettings(); showToast('✓ Saved'); });
+    .then(function() { closeSettings(); showToast('✓ ' + t('save') + 'd'); });
 }
 
 // Keyboard shortcuts
@@ -309,14 +268,14 @@ function filterPalette() {
   var results = [];
   if (!q) results = ids.slice(-8).reverse();
   else results = ids.filter(function(id) { return conversations[id].title.toLowerCase().includes(q); });
-  var html = '<div class="px-3 py-2 text-[10px] text-[var(--text-muted)] uppercase tracking-wider">' + (q ? 'Results' : 'Recent') + '</div>';
-  if (!results.length) html += '<div class="px-3 py-4 text-center text-xs text-[var(--text-muted)]">No results</div>';
+  var html = '<div class="px-3 py-2 text-[10px] text-[#555] uppercase tracking-wider">' + (q ? 'Results' : 'Recent') + '</div>';
+  if (!results.length) html += '<div class="px-3 py-4 text-center text-xs text-[#555]">No results</div>';
   for (var i = 0; i < results.length; i++) {
     var c = conversations[results[i]];
     html += '<div class="px-3 py-2 rounded-lg cursor-pointer hover:bg-[rgba(255,255,255,0.03)] text-sm flex items-center justify-between" onclick="switchConversation(\'' + results[i] + '\');closePalette();">' +
-      '<span>' + esc(c.title) + '</span><span class="text-[10px] text-[var(--text-muted)]">' + c.time + '</span></div>';
+      '<span>' + esc(c.title) + '</span><span class="text-[10px] text-[#555]">' + c.time + '</span></div>';
   }
-  html += '<div class="border-t border-border mt-2 pt-2 px-3 py-2 rounded-lg cursor-pointer hover:bg-[var(--accent-hover)] text-sm text-accent" onclick="newConversation();closePalette();">+ New Task</div>';
+  html += '<div class="border-t border-border mt-2 pt-2 px-3 py-2 rounded-lg cursor-pointer hover:bg-[rgba(108,92,231,0.08)] text-sm text-accent" onclick="newConversation();closePalette();">+ New Task</div>';
   document.getElementById('paletteResults').innerHTML = html;
 }
 
@@ -348,13 +307,13 @@ function closeAgentPanel() { document.getElementById('agentPanel').classList.rem
 
 function emptyStateHTML(sm) {
   return '<div class="flex flex-col items-center justify-center flex-1 gap-4 sm:gap-5">'+
-    '<div class="w-12 h-12 sm:w-14 sm:h-14 bg-[var(--accent-glow)] rounded-full flex items-center justify-center text-xl sm:text-2xl">✦</div>'+
+    '<div class="w-12 h-12 sm:w-14 sm:h-14 bg-[rgba(108,92,231,0.12)] rounded-full flex items-center justify-center text-xl sm:text-2xl">✦</div>'+
     '<h2 class="text-lg sm:text-xl font-semibold tracking-tight text-center">What do you want to research?</h2>'+
-    '<p class="text-[var(--text-secondary)] text-xs sm:text-sm max-w-xs sm:max-w-md text-center leading-relaxed px-2">Describe your task. AgentSwarm decomposes it, spawns specialized agents, and executes them in parallel.</p>'+
+    '<p class="text-[#999] text-xs sm:text-sm max-w-xs sm:max-w-md text-center leading-relaxed px-2">Describe your task. AgentSwarm decomposes it, spawns specialized agents, and executes them in parallel.</p>'+
     '<div class="flex gap-2 flex-wrap justify-center px-2">'+
-    '<button onclick="suggest(\'调研2025年国产AI芯片市场并生成分析报告\')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[var(--text-secondary)] text-[11px] sm:text-xs transition">国产芯片市场调研</button>'+
-    '<button onclick="suggest(\'对比分析 React 和 Vue 在2025年的生态和发展趋势\')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[var(--text-secondary)] text-[11px] sm:text-xs transition">React vs Vue</button>'+
-    '<button onclick="suggest(\'写一篇关于大语言模型发展的技术报告\')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[var(--text-secondary)] text-[11px] sm:text-xs transition">LLM报告</button>'+
+    '<button onclick="suggest(\'调研2025年国产AI芯片市场并生成分析报告\')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[#999] text-[11px] sm:text-xs transition">国产芯片市场调研</button>'+
+    '<button onclick="suggest(\'对比分析 React 和 Vue 在2025年的生态和发展趋势\')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[#999] text-[11px] sm:text-xs transition">React vs Vue</button>'+
+    '<button onclick="suggest(\'写一篇关于大语言模型发展的技术报告\')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[#999] text-[11px] sm:text-xs transition">LLM报告</button>'+
     '</div></div>';
 }
 
@@ -386,7 +345,7 @@ function loadConversationMessages(convId) {
       conversations[convId].msgs = data.messages.map(function(m) {
         if (m.role === 'user') {
           return '<div class="fade-up flex gap-3.5 max-w-3xl self-end flex-row-reverse">' +
-            '<div class="px-4 py-3.5 bg-[var(--user-bubble-bg)] text-[var(--user-bubble-text)] rounded-2xl rounded-br-md text-sm leading-relaxed">' + esc(m.content) + '</div>' +
+            '<div class="px-4 py-3.5 bg-[#2d2a5e] text-[#e8e4ff] rounded-2xl rounded-br-md text-sm leading-relaxed">' + esc(m.content) + '</div>' +
             '<div class="w-8 h-8 rounded-[10px] bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex-shrink-0 flex items-center justify-center text-xs font-bold">U</div></div>';
         } else {
           return '<div class="fade-up flex gap-3.5 max-w-3xl self-start">' +
@@ -400,7 +359,7 @@ function loadConversationMessages(convId) {
 }
 
 function setConnected(on) {
-  document.getElementById('connDot').className = 'w-1.5 h-1.5 rounded-full ' + (on ? 'bg-green' : 'bg-[var(--text-tertiary)]');
+  document.getElementById('connDot').className = 'w-1.5 h-1.5 rounded-full ' + (on ? 'bg-green' : 'bg-[#333]');
   document.getElementById('connDot').title = on ? 'Connected' : 'Disconnected';
 }
 
@@ -451,7 +410,7 @@ function switchConversation(id) {
   var c = conversations[id];
   document.getElementById('convTitle').textContent = c.title;
   if (!c._loaded) {
-    document.getElementById('chatArea').innerHTML = '<div class="flex items-center justify-center flex-1"><span class="typing text-[var(--text-tertiary)]">Loading conversation</span></div>';
+    document.getElementById('chatArea').innerHTML = '<div class="flex items-center justify-center flex-1"><span class="typing text-[#666]">Loading conversation</span></div>';
     loadConversationMessages(id);
     // Re-render after messages load
     setTimeout(function() {
@@ -472,12 +431,12 @@ function renderConvs() {
   var l = document.getElementById('convList'), ids = Object.keys(conversations);
   var filter = (document.getElementById('convSearch').value || '').toLowerCase();
   if (filter) ids = ids.filter(function(id) { return conversations[id].title.toLowerCase().includes(filter); });
-  if (!ids.length) { l.innerHTML = '<div class="text-center py-6 text-[var(--text-tertiary)] text-xs">' + (filter ? 'No matches' : 'No conversations yet') + '</div>'; return; }
+  if (!ids.length) { l.innerHTML = '<div class="text-center py-6 text-[#666] text-xs">' + (filter ? 'No matches' : 'No conversations yet') + '</div>'; return; }
   l.innerHTML = ids.map(function(id) {
     var c = conversations[id], active = id === activeConvId;
     return '<div class="conv-item px-3 py-2.5 rounded-lg cursor-pointer text-xs transition mb-0.5 flex items-center justify-between group' + (active ? ' bg-surface' : ' hover:bg-surface') + '" onclick="switchConversation(\'' + id + '\')">' +
-      '<div class="truncate flex-1"><span class="' + (active ? 'text-white font-medium' : 'text-[var(--text-secondary)]') + '">' + esc(c.title) + '</span><div class="text-[10px] text-[var(--text-muted)]">' + c.time + '</div></div>' +
-      '<span class="conv-delete ml-2 px-1.5 py-0.5 rounded hover:bg-red/20 text-[var(--text-muted)] hover:text-red text-[10px] flex-shrink-0" onclick="deleteConversation(\'' + id + '\', event)">✕</span>' +
+      '<div class="truncate flex-1"><span class="' + (active ? 'text-white font-medium' : 'text-[#999]') + '">' + esc(c.title) + '</span><div class="text-[10px] text-[#555]">' + c.time + '</div></div>' +
+      '<span class="conv-delete ml-2 px-1.5 py-0.5 rounded hover:bg-red/20 text-[#555] hover:text-red text-[10px] flex-shrink-0" onclick="deleteConversation(\'' + id + '\', event)">✕</span>' +
       '</div>';
   }).join('');
 }
@@ -508,12 +467,12 @@ function submitTask() {
     renderConvs();
   }
 
-  var u = '<div class="fade-up flex gap-3.5 max-w-3xl self-end flex-row-reverse"><div class="px-4 py-3.5 bg-[var(--user-bubble-bg)] text-[var(--user-bubble-text)] rounded-2xl rounded-br-md text-sm leading-relaxed">' + esc(q) + '</div><div class="w-8 h-8 rounded-[10px] bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex-shrink-0 flex items-center justify-center text-xs font-bold">U</div></div>';
+  var u = '<div class="fade-up flex gap-3.5 max-w-3xl self-end flex-row-reverse"><div class="px-4 py-3.5 bg-[#2d2a5e] text-[#e8e4ff] rounded-2xl rounded-br-md text-sm leading-relaxed">' + esc(q) + '</div><div class="w-8 h-8 rounded-[10px] bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex-shrink-0 flex items-center justify-center text-xs font-bold">U</div></div>';
   chat.insertAdjacentHTML('beforeend', u);
   conversations[activeConvId].msgs.push(u);
 
   var aid = 'asst-' + Date.now();
-  var a = '<div class="fade-up flex gap-3.5 max-w-3xl self-start" id="' + aid + '"><div class="w-8 h-8 rounded-[10px] bg-gradient-to-br from-accent to-[#a78bfa] flex-shrink-0 flex items-center justify-center text-xs font-bold">S</div><div class="flex-1 min-w-0"><div class="px-4 py-3.5 bg-surface border border-border rounded-2xl rounded-bl-md text-sm leading-relaxed"><span class="typing text-[var(--text-tertiary)]">Classifying task</span></div><div id="st-' + aid + '"></div></div></div>';
+  var a = '<div class="fade-up flex gap-3.5 max-w-3xl self-start" id="' + aid + '"><div class="w-8 h-8 rounded-[10px] bg-gradient-to-br from-accent to-[#a78bfa] flex-shrink-0 flex items-center justify-center text-xs font-bold">S</div><div class="flex-1 min-w-0"><div class="px-4 py-3.5 bg-surface border border-border rounded-2xl rounded-bl-md text-sm leading-relaxed"><span class="typing text-[#666]">Classifying task</span></div><div id="st-' + aid + '"></div></div></div>';
   chat.insertAdjacentHTML('beforeend', a);
   conversations[activeConvId].msgs.push(a);
   chat.scrollTop = chat.scrollHeight;
@@ -538,7 +497,7 @@ function handleEvent(d, b, st, chat) {
   console.log('[AgentSwarm]', d.type, d.subtask_id || '', d.msg || '');
   switch (d.type) {
     case 'status':
-      b.innerHTML = '<span class="typing text-[var(--text-tertiary)]">' + esc(d.msg) + '</span>';
+      b.innerHTML = '<span class="typing text-[#666]">' + esc(d.msg) + '</span>';
       break;
     case 'dag':
       totalAgents = d.subtasks.length;
@@ -564,14 +523,14 @@ function handleEvent(d, b, st, chat) {
       b.innerHTML = doneMsg;
       if (d.summary) {
         var s = document.createElement('div');
-        s.className = 'mt-3 p-3.5 bg-[var(--bg-deeper)] rounded-lg text-xs leading-relaxed whitespace-pre-wrap max-h-[500px] overflow-y-auto';
+        s.className = 'mt-3 p-3.5 bg-[#0a0a0a] rounded-lg text-xs leading-relaxed whitespace-pre-wrap max-h-[500px] overflow-y-auto';
         s.innerHTML = mdRender(d.summary);
         b.appendChild(s);
       }
       document.getElementById('submitBtn').disabled = false;
       if (eventSource) eventSource.close();
       var taskTitle = conversations[activeConvId] ? conversations[activeConvId].title : 'Task';
-      showToast('<div class="font-medium text-xs text-green">✓ Complete</div><div class="text-[10px] text-[var(--text-secondary)] mt-0.5">' + esc(taskTitle) + '</div>');
+      showToast('<div class="font-medium text-xs text-green">✓ Complete</div><div class="text-[10px] text-[#999] mt-0.5">' + esc(taskTitle) + '</div>');
       agentStates = {};
       break;
     case 'error':
@@ -589,7 +548,7 @@ function renderStepper(st, d) {
   bl.className = 'mt-4';
 
   var dag = document.createElement('div');
-  dag.className = 'bg-[var(--bg-deeper)] border border-border rounded-xl p-3.5 mb-3';
+  dag.className = 'bg-[#0a0a0a] border border-border rounded-xl p-3.5 mb-3';
   var mm = 'graph LR\n';
   var colors = ['#6c5ce7','#00d26a','#f5a623','#f93a3a','#4f8fff','#a78bfa'];
   for (var gi = 0; gi < d.parallel_groups.length; gi++) {
@@ -609,7 +568,7 @@ function renderStepper(st, d) {
 
   var hd = document.createElement('div');
   hd.className = 'flex items-center gap-2 mb-2.5';
-  hd.innerHTML = '<span class="text-xs font-semibold text-[var(--text-secondary)]">Agents</span><span class="text-[10px] px-2 py-0.5 rounded-md bg-[var(--accent-glow)] text-accent font-medium">' + d.parallel_groups.length + ' groups</span>';
+  hd.innerHTML = '<span class="text-xs font-semibold text-[#999]">Agents</span><span class="text-[10px] px-2 py-0.5 rounded-md bg-[rgba(108,92,231,0.15)] text-accent font-medium">' + d.parallel_groups.length + ' groups</span>';
   bl.appendChild(hd);
 
   var ss = document.createElement('div');
@@ -619,7 +578,7 @@ function renderStepper(st, d) {
     var sp = document.createElement('div');
     sp.className = 'step flex items-center gap-3 px-3 py-2.5 rounded-lg transition hover:bg-[rgba(255,255,255,0.02)] cursor-default pending';
     sp.id = 'step-' + s2.id;
-    sp.innerHTML = '<div class="step-dot w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] border-2 border-border text-[var(--text-tertiary)]">' + (parseInt(s2.id.replace('t', '')) || '') + '</div><div class="flex-1 min-w-0"><div class="text-xs font-medium">' + s2.name.replace(/_/g, ' ') + '</div><div class="text-[10px] text-[var(--text-tertiary)] mt-0.5">G' + (gIdx + 1) + ' · ' + s2.tools.join(', ') + '</div></div>';
+    sp.innerHTML = '<div class="step-dot w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] border-2 border-border text-[#666]">' + (parseInt(s2.id.replace('t', '')) || '') + '</div><div class="flex-1 min-w-0"><div class="text-xs font-medium">' + s2.name.replace(/_/g, ' ') + '</div><div class="text-[10px] text-[#666] mt-0.5">G' + (gIdx + 1) + ' · ' + s2.tools.join(', ') + '</div></div>';
     sp.addEventListener('click', function(tid) { return function() { openAgentPanel(tid); }; }(s2.id));
     ss.appendChild(sp);
   }
@@ -639,8 +598,8 @@ function updateStep(tid) {
   dot.className = 'step-dot w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px]';
   if (inf.state === 'completed') dot.className += ' bg-green border-green text-white';
   else if (inf.state === 'failed') dot.className += ' bg-red border-red text-white';
-  else if (inf.state === 'running') dot.className += ' border-accent text-accent bg-[var(--accent-glow)]';
-  else dot.className += ' border-border text-[var(--text-tertiary)]';
+  else if (inf.state === 'running') dot.className += ' border-accent text-accent bg-[rgba(108,92,231,0.15)]';
+  else dot.className += ' border-border text-[#666]';
 }
 
 function toggleStepDetail(tid) {
@@ -649,7 +608,7 @@ function toggleStepDetail(tid) {
   var el = document.getElementById('dt-' + tid);
   if (!el) {
     el = document.createElement('div');
-    el.className = 'step-detail px-3 py-2 pb-3 text-xs text-[var(--text-secondary)] whitespace-pre-wrap border-b border-border mb-1';
+    el.className = 'step-detail px-3 py-2 pb-3 text-xs text-[#999] whitespace-pre-wrap border-b border-border mb-1';
     el.id = 'dt-' + tid;
     document.getElementById('step-' + tid).parentNode.insertBefore(el, document.getElementById('step-' + tid).nextSibling);
   }
