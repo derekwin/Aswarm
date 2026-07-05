@@ -1,345 +1,181 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AgentSwarm</title>
+<script src="https://cdn.tailwindcss.com"></script>
 <script>
-// Mermaid with China-friendly CDN fallback
-(function() {
-  var s = document.createElement('script');
-  s.src = 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js';
-  s.onerror = function() {
-    var f = document.createElement('script');
-    f.src = 'https://unpkg.com/mermaid@10/dist/mermaid.min.js';
-    document.head.appendChild(f);
-  };
-  document.head.appendChild(s);
-})();
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        surface: { DEFAULT: '#161616', hover: '#1e1e1e' },
+        border: '#262626',
+        accent: { DEFAULT: '#6c5ce7', dim: '#5a4bd1', glow: 'rgba(108,92,231,0.15)' },
+        green: '#00d26a',
+        red: '#f93a3a',
+      }
+    }
+  }
+}
 </script>
 <style>
-:root {
-  --bg: #0d0d0d;
-  --sidebar-bg: #0a0a0a;
-  --surface: #161616;
-  --border: #262626;
-  --text: #ececec;
-  --text-secondary: #999;
-  --text-tertiary: #666;
-  --accent: #6c5ce7;
-  --accent-glow: rgba(108,92,231,0.15);
-  --green: #00d26a;
-  --red: #f93a3a;
-  --amber: #f5a623;
-  --radius: 10px;
-  --radius-lg: 16px;
-  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-}
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: var(--font); background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; -webkit-font-smoothing: antialiased; }
-
-.sidebar { width: 280px; background: var(--sidebar-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
-.sidebar-header { padding: 20px 18px 12px; display: flex; align-items: center; gap: 10px; }
-.sidebar-header .logo { width: 30px; height: 30px; background: linear-gradient(135deg, #6c5ce7, #a78bfa); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
-.sidebar-header h2 { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.3px; }
-.new-conv-btn { margin: 0 12px 12px; padding: 10px 14px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font-size: 0.85rem; transition: 0.2s; display: flex; align-items: center; gap: 8px; font-family: var(--font); }
-.new-conv-btn:hover { border-color: var(--accent); background: var(--accent-glow); }
-.conv-list { flex: 1; overflow-y: auto; padding: 4px 8px; }
-.conv-item { padding: 10px 12px; border-radius: var(--radius); cursor: pointer; font-size: 0.83rem; color: var(--text-secondary); transition: 0.15s; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.conv-item:hover { background: var(--surface); color: var(--text); }
-.conv-item.active { background: var(--surface); color: var(--text); font-weight: 500; }
-.empty-conv { text-align: center; padding: 24px 16px; color: var(--text-tertiary); font-size: 0.8rem; }
-
-.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.main-header { padding: 16px 28px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-.main-header h3 { font-size: 0.95rem; font-weight: 600; letter-spacing: -0.2px; }
-.model-badge { font-size: 0.75rem; padding: 5px 12px; background: var(--surface); border-radius: 20px; color: var(--text-secondary); border: 1px solid var(--border); }
-.chat-area { flex: 1; overflow-y: auto; padding: 32px 28px; display: flex; flex-direction: column; gap: 28px; }
-
-.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 20px; }
-.empty-state .icon { width: 56px; height: 56px; background: var(--accent-glow); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; }
-.empty-state h2 { font-size: 1.3rem; font-weight: 600; letter-spacing: -0.3px; }
-.empty-state p { color: var(--text-secondary); font-size: 0.9rem; max-width: 400px; text-align: center; line-height: 1.5; }
-.suggestion-chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-.suggestion-chip { padding: 8px 16px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); cursor: pointer; font-size: 0.82rem; transition: 0.15s; font-family: var(--font); }
-.suggestion-chip:hover { border-color: var(--accent); color: var(--text); background: var(--accent-glow); }
-
-.message { display: flex; gap: 14px; max-width: 820px; animation: fadeUp 0.35s ease; }
-.message.user { align-self: flex-end; flex-direction: row-reverse; }
-.message.assistant { align-self: flex-start; }
-.avatar { width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; }
-.avatar.user { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
-.avatar.assistant { background: linear-gradient(135deg, var(--accent), #a78bfa); }
-.bubble { padding: 16px 20px; border-radius: var(--radius-lg); font-size: 0.9rem; line-height: 1.65; }
-.bubble.user { background: #2d2a5e; color: #e8e4ff; border-bottom-right-radius: 6px; }
-.bubble.assistant { background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 6px; }
-.bubble .typing { color: var(--text-tertiary); }
-.bubble .typing::after { content: '...'; animation: dots 1.5s steps(3, end) infinite; }
-@keyframes dots { 0%,20% { content: ''; } 40% { content: '.'; } 60% { content: '..'; } 80%,100% { content: '...'; } }
-
-.stepper { margin-top: 16px; }
-.stepper-header { font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
-.stepper-header .badge { font-size: 0.7rem; padding: 3px 8px; border-radius: 6px; background: var(--accent-glow); color: var(--accent); }
-.stepper-steps { display: flex; flex-direction: column; gap: 2px; }
-.step { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius); transition: 0.15s; cursor: default; }
-.step.completed, .step.failed { cursor: pointer; }
-.step:hover { background: rgba(255,255,255,0.02); }
-.step-dot { width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; border: 2px solid var(--border); transition: 0.2s; }
-.step.pending .step-dot { border-color: var(--border); color: var(--text-tertiary); }
-.step.running .step-dot { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); animation: pulse-step 1.2s infinite; }
-@keyframes pulse-step { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
-.step.completed .step-dot { background: var(--green); border-color: var(--green); color: #fff; }
-.step.failed .step-dot { background: var(--red); border-color: var(--red); color: #fff; }
-.step-info { flex: 1; min-width: 0; }
-.step-name { font-size: 0.82rem; font-weight: 500; }
-.step-meta { font-size: 0.7rem; color: var(--text-tertiary); margin-top: 1px; }
-.step-detail { padding: 8px 12px 12px 34px; font-size: 0.75rem; color: var(--text-secondary); white-space: pre-wrap; display: none; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+.step-dot { transition: all 0.2s ease; }
+.step-running .step-dot { animation: pulse-dot 1.2s infinite; }
+@keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.step-detail { display: none; }
 .step-detail.show { display: block; }
-.dag-container { background: #0a0a0a; border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-top: 12px; margin-bottom: 4px; }
-
-.input-area { padding: 16px 28px 20px; border-top: 1px solid var(--border); flex-shrink: 0; }
-.input-wrapper { display: flex; gap: 10px; max-width: 820px; margin: 0 auto; align-items: flex-end; }
-.input-wrapper textarea { flex: 1; padding: 14px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); color: var(--text); font-family: var(--font); font-size: 0.9rem; resize: none; min-height: 48px; max-height: 140px; line-height: 1.5; transition: 0.15s; }
-.input-wrapper textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
-.input-wrapper button { padding: 14px 24px; background: var(--accent); border: none; border-radius: var(--radius-lg); color: white; font-weight: 600; cursor: pointer; font-size: 0.85rem; transition: 0.15s; flex-shrink: 0; height: 48px; }
-.input-wrapper button:hover { filter: brightness(1.15); }
-.input-wrapper button:disabled { opacity: 0.3; cursor: not-allowed; }
-
+.typing::after { content: '...'; animation: dots 1.5s steps(3, end) infinite; }
+@keyframes dots { 0%,20% { content: ''; } 40% { content: '.'; } 60% { content: '..'; } 80%,100% { content: '...'; } }
+.fade-up { animation: fadeUp 0.35s ease; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 var(--accent-glow); } 50% { box-shadow: 0 0 0 8px transparent; } }
-::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-
-@media (max-width: 768px) { .sidebar { display: none; } .bubble { max-width: 100%; } }
+::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #262626; border-radius: 4px; }
 </style>
 </head>
-<body>
+<body class="bg-[#0d0d0d] text-[#ececec] h-screen flex overflow-hidden">
 
-<aside class="sidebar">
-  <div class="sidebar-header">
-    <div class="logo">⚡</div>
-    <h2>AgentSwarm</h2>
+<!-- Sidebar -->
+<aside class="w-64 lg:w-72 bg-[#0a0a0a] border-r border-border flex flex-col flex-shrink-0 hidden md:flex">
+  <div class="p-5 flex items-center gap-3 border-b border-border">
+    <div class="w-7 h-7 bg-gradient-to-br from-accent to-[#a78bfa] rounded-lg flex items-center justify-center text-sm">⚡</div>
+    <h2 class="text-base font-bold tracking-tight">AgentSwarm</h2>
   </div>
-  <button class="new-conv-btn" onclick="newConversation()">＋ New Task</button>
-  <div class="conv-list" id="convList">
-    <div class="empty-conv">No conversations yet</div>
+  <button onclick="newConversation()" class="mx-3 mt-3 px-4 py-2.5 rounded-xl border border-border bg-surface hover:border-accent hover:bg-[rgba(108,92,231,0.08)] text-sm transition flex items-center gap-2">
+    <span class="text-lg leading-none">+</span> New Task
+  </button>
+  <div id="convList" class="flex-1 overflow-y-auto p-2">
+    <div class="text-center py-6 text-[#666] text-xs">No conversations yet</div>
   </div>
 </aside>
 
-<main class="main">
-  <header class="main-header">
-    <h3 id="convTitle">New Task</h3>
-    <span class="model-badge">qwen3.5:35b</span>
+<!-- Main -->
+<main class="flex-1 flex flex-col min-w-0">
+  <header class="px-5 lg:px-7 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
+    <h3 id="convTitle" class="text-sm font-semibold tracking-tight">New Task</h3>
+    <span class="text-xs px-3 py-1.5 bg-surface border border-border rounded-full text-[#999]">qwen3.5:35b</span>
   </header>
 
-  <div class="chat-area" id="chatArea">
-    <div class="empty-state" id="emptyState">
-      <div class="icon">✦</div>
-      <h2>What do you want to research?</h2>
-      <p>Describe your task. AgentSwarm decomposes it, spawns specialized agents, and executes them in parallel.</p>
-      <div class="suggestion-chips">
-        <button class="suggestion-chip" onclick="suggest('调研2025年国产AI芯片市场并生成分析报告')">国产芯片市场调研</button>
-        <button class="suggestion-chip" onclick="suggest('对比分析 React 和 Vue 在2025年的生态和发展趋势')">React vs Vue 趋势</button>
-        <button class="suggestion-chip" onclick="suggest('写一篇关于大语言模型发展的技术报告')">LLM技术报告</button>
+  <div id="chatArea" class="flex-1 overflow-y-auto px-5 lg:px-7 py-8 flex flex-col gap-7">
+    <div class="flex flex-col items-center justify-center flex-1 gap-5" id="emptyState">
+      <div class="w-14 h-14 bg-[rgba(108,92,231,0.12)] rounded-full flex items-center justify-center text-2xl">✦</div>
+      <h2 class="text-xl font-semibold tracking-tight">What do you want to research?</h2>
+      <p class="text-[#999] text-sm max-w-md text-center leading-relaxed">Describe your task. AgentSwarm decomposes it, spawns specialized agents, and executes them in parallel.</p>
+      <div class="flex gap-2 flex-wrap justify-center">
+        <button onclick="suggest('调研2025年国产AI芯片市场并生成分析报告')" class="px-4 py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[#999] text-xs transition">国产芯片市场调研</button>
+        <button onclick="suggest('对比分析 React 和 Vue 在2025年的生态和发展趋势')" class="px-4 py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[#999] text-xs transition">React vs Vue 趋势</button>
+        <button onclick="suggest('写一篇关于大语言模型发展的技术报告')" class="px-4 py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[#999] text-xs transition">LLM技术报告</button>
       </div>
     </div>
   </div>
 
-  <div class="input-area">
-    <div class="input-wrapper">
-      <textarea id="queryInput" placeholder="Describe your task..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitTask()}"></textarea>
-      <button id="submitBtn" onclick="submitTask()">Send</button>
+  <div class="px-5 lg:px-7 py-4 border-t border-border flex-shrink-0">
+    <div class="flex gap-3 max-w-3xl mx-auto items-end">
+      <textarea id="queryInput" placeholder="Describe your task..." rows="1"
+        class="flex-1 px-4 py-3.5 bg-surface border border-border rounded-2xl text-[#ececec] text-sm resize-none min-h-[48px] max-h-[140px] leading-relaxed focus:outline-none focus:border-accent focus:ring-4 focus:ring-[rgba(108,92,231,0.12)] transition"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitTask()}"></textarea>
+      <button id="submitBtn" onclick="submitTask()"
+        class="px-6 py-3.5 bg-accent hover:brightness-110 rounded-2xl text-white font-semibold text-sm transition flex-shrink-0 h-[48px] disabled:opacity-30 disabled:cursor-not-allowed">Send</button>
     </div>
   </div>
 </main>
 
 <script>
-mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+let conversations = {}, activeConvId = null, eventSource = null, agentStates = {};
 
-let conversations = {};
-let activeConvId = null;
-let eventSource = null;
-let agentStates = {};
-
-function newConversation() {
-  if (eventSource) eventSource.close();
-  const id = 'conv_' + Date.now();
-  conversations[id] = { title: 'New Task', messages: [] };
-  activeConvId = id;
-  renderConversations();
-  document.getElementById('chatArea').innerHTML = `<div class="empty-state" id="emptyState">
-    <div class="icon">✦</div><h2>What do you want to research?</h2>
-    <p>Describe your task. AgentSwarm decomposes it, spawns specialized agents, and executes them in parallel.</p>
-    <div class="suggestion-chips">
-      <button class="suggestion-chip" onclick="suggest('调研2025年国产AI芯片市场并生成分析报告')">国产芯片市场调研</button>
-      <button class="suggestion-chip" onclick="suggest('对比分析 React 和 Vue 在2025年的生态和发展趋势')">React vs Vue 趋势</button>
-      <button class="suggestion-chip" onclick="suggest('写一篇关于大语言模型发展的技术报告')">LLM技术报告</button>
-    </div></div>`;
-  document.getElementById('convTitle').textContent = 'New Task';
-  document.getElementById('submitBtn').disabled = false;
-  agentStates = {};
+function loadMermaid(cb) {
+  if (window.mermaid) return cb();
+  var s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js';
+  s.onerror = function() { s.src = 'https://unpkg.com/mermaid@10/dist/mermaid.min.js'; };
+  s.onload = function() { mermaid.initialize({ startOnLoad: true, theme: 'dark' }); cb(); };
+  document.head.appendChild(s);
 }
 
-function switchConversation(id) {
-  if (eventSource) eventSource.close();
-  activeConvId = id;
-  agentStates = {};  // reset on switch
-  if (conversations[activeConvId]) {
-    conversations[activeConvId]._html = document.getElementById('chatArea').innerHTML;
+function newConversation() { if(eventSource)eventSource.close(); var id='conv_'+Date.now(); conversations[id]={title:'New Task',msgs:[]}; activeConvId=id; renderConvs(); document.getElementById('chatArea').innerHTML=`<div class="flex flex-col items-center justify-center flex-1 gap-5"><div class="w-14 h-14 bg-[rgba(108,92,231,0.12)] rounded-full flex items-center justify-center text-2xl">✦</div><h2 class="text-xl font-semibold tracking-tight">What do you want to research?</h2><p class="text-[#999] text-sm max-w-md text-center leading-relaxed">Describe your task to begin.</p></div>`; document.getElementById('convTitle').textContent='New Task'; document.getElementById('submitBtn').disabled=false; agentStates={}; }
+
+function switchConversation(id) { if(eventSource)eventSource.close(); if(conversations[activeConvId]) conversations[activeConvId]._html=document.getElementById('chatArea').innerHTML; activeConvId=id; agentStates={}; var c=conversations[id]; document.getElementById('convTitle').textContent=c.title; var h=c._html||(c.msgs&&c.msgs.length?c.msgs.join(''):''); document.getElementById('chatArea').innerHTML=h||`<div class="flex flex-col items-center justify-center flex-1 gap-5"><div class="w-14 h-14 bg-[rgba(108,92,231,0.12)] rounded-full flex items-center justify-center text-2xl">✦</div><h2 class="text-xl font-semibold tracking-tight">What do you want to research?</h2><p class="text-[#999] text-sm max-w-md text-center leading-relaxed">Describe your task to begin.</p></div>`; renderConvs(); document.getElementById('submitBtn').disabled=false; }
+
+function renderConvs() { var l=document.getElementById('convList'),ids=Object.keys(conversations); if(!ids.length){l.innerHTML='<div class="text-center py-6 text-[#666] text-xs">No conversations yet</div>';return;} l.innerHTML=ids.map(function(id){return'<div class="px-3 py-2.5 rounded-lg cursor-pointer text-xs text-[#999] hover:bg-surface hover:text-white transition mb-0.5 truncate'+(id===activeConvId?' bg-surface text-white font-medium':'')+'" onclick="switchConversation(\''+id+'\')">'+esc(conversations[id].title)+'</div>';}).join(''); }
+
+function suggest(t){document.getElementById('queryInput').value=t;document.getElementById('queryInput').focus();}
+
+function submitTask(){
+  var q=document.getElementById('queryInput').value.trim(); if(!q)return;
+  if(!activeConvId) newConversation();
+  document.getElementById('submitBtn').disabled=true; document.getElementById('queryInput').value='';
+  var chat=document.getElementById('chatArea'),ee=chat.querySelector('.flex-col.items-center.justify-center'); if(ee)chat.innerHTML='';
+  if(conversations[activeConvId].title==='New Task'){conversations[activeConvId].title=q.slice(0,40);document.getElementById('convTitle').textContent=q.slice(0,40);renderConvs();}
+  var u='<div class="fade-up flex gap-3.5 max-w-3xl self-end flex-row-reverse"><div class="px-4 py-3.5 bg-[#2d2a5e] text-[#e8e4ff] rounded-2xl rounded-br-md text-sm leading-relaxed">'+esc(q)+'</div><div class="w-8 h-8 rounded-[10px] bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex-shrink-0 flex items-center justify-center text-xs font-bold">U</div></div>';
+  chat.insertAdjacentHTML('beforeend',u); conversations[activeConvId].msgs.push(u);
+  var aid='asst-'+Date.now(),a='<div class="fade-up flex gap-3.5 max-w-3xl self-start" id="'+aid+'"><div class="w-8 h-8 rounded-[10px] bg-gradient-to-br from-accent to-[#a78bfa] flex-shrink-0 flex items-center justify-center text-xs font-bold">S</div><div class="flex-1 min-w-0"><div class="px-4 py-3.5 bg-surface border border-border rounded-2xl rounded-bl-md text-sm leading-relaxed"><span class="typing text-[#666]">Planning task decomposition</span></div><div id="st-'+aid+'"></div></div></div>';
+  chat.insertAdjacentHTML('beforeend',a); conversations[activeConvId].msgs.push(a); chat.scrollTop=chat.scrollHeight;
+  var b=document.querySelector('#'+aid+' .bg-surface'),st=document.getElementById('st-'+aid);
+  fetch('/run?query='+encodeURIComponent(q),{method:'POST'}).then(function(r){return r.json();}).then(function(d){
+    if(eventSource)eventSource.close();
+    eventSource=new EventSource('/stream/'+d.task_id);
+    eventSource.onmessage=function(e){handleEvent(JSON.parse(e.data),b,st,chat);};
+    eventSource.onerror=function(){b.innerHTML='Connection lost.';document.getElementById('submitBtn').disabled=false;};
+  });
+}
+
+function handleEvent(d,b,st,chat){
+  console.log('[AgentSwarm]',d.type,d.subtask_id||'',d.msg||'');
+  switch(d.type){
+    case'status':b.innerHTML='<span class="typing text-[#666]">'+esc(d.msg)+'</span>';break;
+    case'dag':b.innerHTML='Decomposed into <strong>'+d.subtasks.length+' agents</strong> across <strong>'+d.parallel_groups.length+' parallel groups</strong>.';loadMermaid(function(){renderStepper(st,d);});break;
+    case'agent_start':agentStates[d.subtask_id]={state:'running',name:d.agent_name,role:d.role};updateStep(d.subtask_id);break;
+    case'agent_done':agentStates[d.subtask_id]={state:d.state,name:agentStates[d.subtask_id]?agentStates[d.subtask_id].name:d.subtask_id,role:agentStates[d.subtask_id]?agentStates[d.subtask_id].role:'',output:d.output,error:d.error,retry:d.retry_count};updateStep(d.subtask_id);break;
+    case'done':b.innerHTML='<strong>Complete.</strong> '+(d.results?d.results.filter(function(r){return r.state==='completed';}).length:0)+'/'+(d.results?d.results.length:0)+' agents finished.';if(d.summary){var s=document.createElement('div');s.className='mt-3 p-3.5 bg-[#0a0a0a] rounded-lg text-xs leading-relaxed whitespace-pre-wrap max-h-[500px] overflow-y-auto';s.textContent=d.summary;b.appendChild(s);}document.getElementById('submitBtn').disabled=false;if(eventSource)eventSource.close();agentStates={};break;
+    case'error':b.innerHTML='<span class="text-red">'+esc(d.msg)+'</span>';document.getElementById('submitBtn').disabled=false;break;
   }
-  const conv = conversations[id];
-  document.getElementById('convTitle').textContent = conv.title;
-  const chat = document.getElementById('chatArea');
-  chat.innerHTML = conv._html || (conv.messages && conv.messages.length ? conv.messages.join('') : '');
-  if (!chat.innerHTML.trim()) {
-    chat.innerHTML = `<div class="empty-state"><div class="icon">✦</div><h2>What do you want to research?</h2><p>Describe your task to begin.</p></div>`;
+  chat.scrollTop=chat.scrollHeight;
+}
+
+function renderStepper(st,d){
+  st.innerHTML=''; var bl=document.createElement('div'); bl.className='mt-4';
+  var dag=document.createElement('div'); dag.className='bg-[#0a0a0a] border border-border rounded-xl p-3.5 mb-3';
+  var mm='graph LR\n';
+  for(var gi=0;gi<d.parallel_groups.length;gi++){mm+='  subgraph G'+(gi+1)+'[G'+(gi+1)+']\n    style G'+(gi+1)+' fill:#0a0a0a,stroke:#262626\n';for(var ti=0;ti<d.parallel_groups[gi].length;ti++){var tid=d.parallel_groups[gi][ti],sd=d.subtasks.find(function(x){return x.id===tid;})||{};mm+='    '+tid+'["'+esc((sd.name||tid).slice(0,18))+'"]\n';}mm+='  end\n';}
+  for(var si=0;si<d.subtasks.length;si++){var s=d.subtasks[si];for(var di=0;di<s.depends_on.length;di++){mm+='  '+s.depends_on[di]+' --> '+s.id+'\n';}}
+  dag.innerHTML='<div class="mermaid">'+mm+'</div>'; bl.appendChild(dag);
+  var hd=document.createElement('div'); hd.className='flex items-center gap-2 mb-2.5';
+  hd.innerHTML='<span class="text-xs font-semibold text-[#999]">Agents</span><span class="text-[10px] px-2 py-0.5 rounded-md bg-[rgba(108,92,231,0.15)] text-accent font-medium">'+d.parallel_groups.length+' groups</span>';
+  bl.appendChild(hd);
+  var ss=document.createElement('div'); ss.className='flex flex-col gap-0.5';
+  for(var si2=0;si2<d.subtasks.length;si2++){var s2=d.subtasks[si2],gIdx=d.parallel_groups.findIndex(function(g){return g.includes(s2.id);});
+    var sp=document.createElement('div'); sp.className='step flex items-center gap-3 px-3 py-2.5 rounded-lg transition hover:bg-[rgba(255,255,255,0.02)] cursor-default pending'; sp.id='step-'+s2.id;
+    sp.innerHTML='<div class="step-dot w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] border-2 border-border text-[#666]">'+(parseInt(s2.id.replace('t',''))||'')+'</div><div class="flex-1 min-w-0"><div class="text-xs font-medium">'+s2.name.replace(/_/g,' ')+'</div><div class="text-[10px] text-[#666] mt-0.5">G'+(gIdx+1)+' · '+s2.tools.join(', ')+'</div></div>';
+    sp.addEventListener('click',function(tid){return function(){toggleStepDetail(tid);};}(s2.id));
+    ss.appendChild(sp);
   }
-  renderConversations();
-  document.getElementById('submitBtn').disabled = false;
+  bl.appendChild(ss); st.appendChild(bl);
 }
 
-function renderConversations() {
-  const list = document.getElementById('convList');
-  const ids = Object.keys(conversations);
-  if (ids.length === 0) { list.innerHTML = '<div class="empty-conv">No conversations yet</div>'; return; }
-  list.innerHTML = ids.map(id => `<div class="conv-item${id===activeConvId?' active':''}" onclick="switchConversation('${id}')">${esc(conversations[id].title)}</div>`).join('');
+function updateStep(tid){
+  var sp=document.getElementById('step-'+tid); if(!sp)return;
+  var inf=agentStates[tid]; sp.className=sp.className.replace(/pending|running|completed|failed/g,inf.state);
+  if(inf.state==='running') sp.className+=' step-running';
+  if(inf.state==='completed'||inf.state==='failed') sp.className+=' cursor-pointer';
+  var dot=sp.querySelector('.step-dot'); dot.textContent=inf.state==='completed'?'✓':inf.state==='failed'?'✗':dot.textContent;
+  dot.className='step-dot w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px]';
+  if(inf.state==='completed') dot.className+=' bg-green border-green text-white';
+  else if(inf.state==='failed') dot.className+=' bg-red border-red text-white';
+  else if(inf.state==='running') dot.className+=' border-accent text-accent bg-[rgba(108,92,231,0.15)]';
+  else dot.className+=' border-border text-[#666]';
 }
 
-function suggest(text) { document.getElementById('queryInput').value = text; document.getElementById('queryInput').focus(); }
-
-function submitTask() {
-  const query = document.getElementById('queryInput').value.trim();
-  if (!query) return;
-  if (!activeConvId) newConversation();
-  document.getElementById('submitBtn').disabled = true;
-  document.getElementById('queryInput').value = '';
-
-  const chat = document.getElementById('chatArea');
-  const emptyEl = chat.querySelector('.empty-state');
-  if (emptyEl) chat.innerHTML = '';
-
-  if (conversations[activeConvId].title === 'New Task') {
-    conversations[activeConvId].title = query.slice(0, 40);
-    document.getElementById('convTitle').textContent = query.slice(0, 40);
-    renderConversations();
-  }
-
-  const userHtml = `<div class="message user"><div class="bubble user">${esc(query)}</div><div class="avatar user">U</div></div>`;
-  chat.insertAdjacentHTML('beforeend', userHtml);
-  conversations[activeConvId].messages.push(userHtml);
-
-  const asstId = 'asst-' + Date.now();
-  const asstHtml = `<div class="message assistant" id="${asstId}">
-    <div class="avatar assistant">S</div>
-    <div style="flex:1">
-      <div class="bubble assistant"><span class="typing">Planning task decomposition</span></div>
-      <div id="stepper-${asstId}"></div>
-    </div></div>`;
-  chat.insertAdjacentHTML('beforeend', asstHtml);
-  conversations[activeConvId].messages.push(asstHtml);
-  chat.scrollTop = chat.scrollHeight;
-
-  const bubble = document.querySelector(`#${asstId} .bubble`);
-  const stepper = document.getElementById(`stepper-${asstId}`);
-
-  fetch(`/run?query=${encodeURIComponent(query)}`, { method: 'POST' })
-    .then(r => r.json())
-    .then(({ task_id }) => {
-      if (eventSource) eventSource.close();
-      eventSource = new EventSource(`/stream/${task_id}`);
-      eventSource.onmessage = (e) => handleEvent(JSON.parse(e.data), bubble, stepper);
-      eventSource.onerror = () => { bubble.innerHTML = 'Connection lost.'; document.getElementById('submitBtn').disabled = false; };
-    });
-}
-
-function handleEvent(data, bubble, stepper) {
-  console.log('[AgentSwarm]', data.type, data.subtask_id || '', data.msg || '');
-  const chat = document.getElementById('chatArea');
-  switch (data.type) {
-    case 'status':
-      bubble.innerHTML = `<span class="typing">${esc(data.msg)}</span>`;
-      break;
-    case 'dag':
-      bubble.innerHTML = `Decomposed into <strong>${data.subtasks.length} agents</strong> across <strong>${data.parallel_groups.length} parallel groups</strong>.`;
-      renderStepper(stepper, data);
-      break;
-    case 'agent_start':
-      agentStates[data.subtask_id] = { state: 'running', name: data.agent_name, role: data.role };
-      updateStep(data.subtask_id);
-      break;
-    case 'agent_done':
-      agentStates[data.subtask_id] = { state: data.state, name: agentStates[data.subtask_id]?.name || data.subtask_id, role: agentStates[data.subtask_id]?.role || '', output: data.output, error: data.error, retry: data.retry_count };
-      updateStep(data.subtask_id);
-      break;
-    case 'done':
-      bubble.innerHTML = `<strong>Complete.</strong> ${data.results?.filter(r=>r.state==='completed').length||0}/${data.results?.length||0} agents finished.`;
-      if (data.summary) { const d=document.createElement('div'); d.style.cssText='margin-top:12px;padding:14px;background:#0a0a0a;border-radius:8px;font-size:0.82rem;line-height:1.6;white-space:pre-wrap;max-height:500px;overflow-y:auto;'; d.textContent=data.summary; bubble.appendChild(d); }
-      document.getElementById('submitBtn').disabled = false;
-      if (eventSource) eventSource.close();
-      agentStates = {};
-      break;
-    case 'error':
-      bubble.innerHTML = `<span style="color:#f93a3a">${esc(data.msg)}</span>`;
-      document.getElementById('submitBtn').disabled = false;
-      break;
-  }
-  chat.scrollTop = chat.scrollHeight;
-}
-
-function renderStepper(container, data) {
-  container.innerHTML = '';
-  const block = document.createElement('div');
-  block.className = 'stepper';
-  const dagDiv = document.createElement('div');
-  dagDiv.className = 'dag-container';
-  let mm = 'graph LR\n';
-  for (let gi = 0; gi < data.parallel_groups.length; gi++) {
-    mm += `  subgraph G${gi+1}[G${gi+1}]\n    style G${gi+1} fill:#0a0a0a,stroke:#262626\n`;
-    for (const tid of data.parallel_groups[gi]) {
-      const s = data.subtasks.find(x => x.id === tid) || {};
-      mm += `    ${tid}["${esc((s.name||tid).slice(0,18))}"]\n`;
-    }
-    mm += `  end\n`;
-  }
-  for (const s of data.subtasks) for (const dep of s.depends_on) mm += `  ${dep} --> ${s.id}\n`;
-  dagDiv.innerHTML = `<div class="mermaid">${mm}</div>`;
-  block.appendChild(dagDiv);
-  const hdr = document.createElement('div');
-  hdr.className = 'stepper-header';
-  hdr.innerHTML = `<span>Agents</span> <span class="badge">${data.parallel_groups.length} groups</span>`;
-  block.appendChild(hdr);
-  const steps = document.createElement('div');
-  steps.className = 'stepper-steps';
-  for (const s of data.subtasks) {
-    const gIdx = data.parallel_groups.findIndex(g => g.includes(s.id));
-    const step = document.createElement('div');
-    step.className = 'step pending';
-    step.id = `step-${s.id}`;
-    step.innerHTML = `<div class="step-dot">${s.id.replace('t','')}</div><div class="step-info"><div class="step-name">${s.name.replace(/_/g,' ')}</div><div class="step-meta">G${gIdx+1} · ${s.tools.join(', ')}</div></div>`;
-    step.addEventListener('click', () => toggleStepDetail(s.id));
-    steps.appendChild(step);
-  }
-  block.appendChild(steps);
-  container.appendChild(block);
-}
-
-function updateStep(tid) {
-  const step = document.getElementById(`step-${tid}`);
-  if (!step) return;
-  const info = agentStates[tid];
-  step.className = `step ${info.state}`;
-  step.querySelector('.step-dot').textContent = info.state === 'completed' ? '✓' : info.state === 'failed' ? '✗' : step.querySelector('.step-dot').textContent;
-}
-
-function toggleStepDetail(tid) {
-  const info = agentStates[tid];
-  if (!info || (!info.output && !info.error)) return;
-  let el = document.getElementById(`detail-${tid}`);
-  if (!el) { el = document.createElement('div'); el.className = 'step-detail'; el.id = `detail-${tid}`; document.getElementById(`step-${tid}`).after(el); }
-  el.textContent = (info.output||'') + (info.error ? `\n[ERROR: ${info.error}]` : '') + (info.retry ? `\nRetries: ${info.retry}` : '');
+function toggleStepDetail(tid){
+  var inf=agentStates[tid]; if(!inf||(!inf.output&&!inf.error))return;
+  var el=document.getElementById('dt-'+tid);
+  if(!el){el=document.createElement('div');el.className='step-detail px-3 py-2 pb-3 text-xs text-[#999] whitespace-pre-wrap border-b border-border mb-1';el.id='dt-'+tid;var sp=document.getElementById('step-'+tid);sp.parentNode.insertBefore(el,sp.nextSibling);}
+  el.textContent=(inf.output||'')+(inf.error?'\n[ERROR: '+inf.error+']':'')+(inf.retry?'\nRetries: '+inf.retry:'');
   el.classList.toggle('show');
 }
 
-function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 </script>
 </body>
 </html>
