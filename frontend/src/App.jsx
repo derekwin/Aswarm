@@ -38,19 +38,22 @@ function reducer(state, action) {
       const convs = {...state.conversations}
       const c = convs[action.payload.id]
       const msgs = [...(c.messages||[])]
-      if (msgs.length) msgs[msgs.length-1] = {...msgs[msgs.length-1], content: action.payload.content}
+      if (msgs.length) msgs[msgs.length-1] = {...msgs[msgs.length-1], ...action.payload.updates}
       convs[action.payload.id] = {...c, messages:msgs}
       return {...state, conversations:convs}
     }
     case 'SET_MSGS': return { ...state, conversations: {...state.conversations, [action.payload.id]: {...state.conversations[action.payload.id], messages:action.payload.messages, _loaded:true} }}
     case 'SET_TITLE': return { ...state, conversations: {...state.conversations, [action.payload.id]: {...state.conversations[action.payload.id], title:action.payload.title} }}
+    case 'SET_CONV_META': return { ...state, conversations: {...state.conversations, [action.payload.id]: {...state.conversations[action.payload.id], ...action.payload.meta} }}
+    case 'UPDATE_AGENT': {
+      const convs = {...state.conversations}
+      const c = convs[action.payload.convId]
+      convs[action.payload.convId] = {...c, agents:{...(c.agents||{}), [action.payload.id]: {...(c.agents?.[action.payload.id]||{}), ...action.payload.data}}}
+      return {...state, conversations:convs}
+    }
     case 'SET_THEME': return { ...state, theme: action.payload }
     case 'SET_LANG': return { ...state, lang: action.payload }
     case 'SET_CONNECTED': return { ...state, connected: action.payload }
-    case 'UPDATE_AGENT': return { ...state, agentStates: {...state.agentStates, [action.payload.id]: {...(state.agentStates[action.payload.id]||{}), ...action.payload.data}} }
-    case 'RESET_TASK': return { ...state, agentStates:{}, totalAgents:0, completedAgents:0 }
-    case 'SET_TASK': return { ...state, totalAgents:action.payload.total, completedAgents:0, agentStates:{} }
-    case 'INC_COMPLETED': return { ...state, completedAgents: state.completedAgents+1 }
     case 'SET_MONITOR': return { ...state, monitorOpen: action.payload }
     case 'SET_SIDEBAR_OPEN': return { ...state, sidebarOpen: action.payload }
     case 'SET_PANEL': return { ...state, panelAgent: action.payload }
@@ -63,7 +66,7 @@ function reducer(state, action) {
 
 function initState() {
   return {
-    conversations:{}, activeConvId:null, agentStates:{}, totalAgents:0, completedAgents:0,
+    conversations:{}, activeConvId:null,
     theme:localStorage.getItem('theme')==='light'?'light':'dark',
     lang:localStorage.getItem('lang')||'en', connected:false, monitorOpen:false, panelAgent:null,
     settingsOpen:false, sidebarOpen:false, toasts:[],
@@ -79,24 +82,17 @@ export default function App() {
     document.documentElement.className = state.theme
     localStorage.setItem('theme', state.theme)
   },[state.theme])
-
-  useEffect(()=>{
-    localStorage.setItem('lang', state.lang)
-  },[state.lang])
-
+  useEffect(()=>{ localStorage.setItem('lang', state.lang) },[state.lang])
   useEffect(()=>{
     fetch('/api/conversations').then(r=>r.json()).then(data=>{
       const convs={}
-      data.forEach(c=>{convs[c.id]={title:c.title,messages:[],time:new Date(c.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),_loaded:false}})
+      data.forEach(c=>{convs[c.id]={title:c.title,messages:[],time:new Date(c.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),_loaded:false,agents:{},totalAgents:0,completedAgents:0}})
       dispatch({type:'SET_CONVS',payload:convs})
     }).catch(()=>{})
   },[])
 
-  // Keyboard shortcuts
   useEffect(()=>{
     const h = e => {
-      if ((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();/*cmd palette later*/}
-      if ((e.ctrlKey||e.metaKey)&&e.key==='n'){e.preventDefault();/*new conv*/}
       if ((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();document.getElementById('queryInput')?.focus()}
       if (e.key==='Escape'){dispatch({type:'SET_PANEL',payload:null})}
     }
@@ -104,7 +100,63 @@ export default function App() {
     return ()=>window.removeEventListener('keydown',h)
   },[])
 
-  const value = { state, dispatch, t, eventSourceRef }
+  // Shared task runner — called by both InputArea and ChatArea edit
+  const runTask = useCallback(async (convId, query) => {
+    dispatch({ type: 'APPEND_MSG', payload: { id: convId, msg: { role: 'user', content: query } } })
+    dispatch({ type: 'APPEND_MSG', payload: { id: convId, msg: { role: 'assistant', content: t('classifying'), typing: true } } })
+    try {
+      const r = await fetch('/run?query=' + encodeURIComponent(query) + '&conv_id=' + encodeURIComponent(convId), { method: 'POST' })
+      const { task_id } = await r.json()
+      if (eventSourceRef.current) eventSourceRef.current.close()
+      dispatch({ type: 'SET_CONNECTED', payload: true })
+      dispatch({ type: 'SET_CONV_META', payload: { id: convId, meta: { running: true } } })
+
+      eventSourceRef.current = new EventSource('/stream/' + task_id)
+      eventSourceRef.current.onmessage = (e) => {
+        const d = JSON.parse(e.data)
+        switch (d.type) {
+          case 'status':
+            dispatch({ type: 'UPDATE_LAST_MSG', payload: { id: convId, updates: { content: d.msg } } })
+            break
+          case 'dag':
+            dispatch({ type: 'SET_CONV_META', payload: { id: convId, meta: { totalAgents: d.subtasks.length, completedAgents: 0, agents: {} } } })
+            dispatch({ type: 'UPDATE_LAST_MSG', payload: { id: convId, updates: { content: 'Decomposed into ' + d.subtasks.length + ' agents across ' + d.parallel_groups.length + ' groups.', dag: d } } })
+            break
+          case 'agent_start':
+            dispatch({ type: 'UPDATE_AGENT', payload: { convId, id: d.subtask_id, data: { state: 'running', name: d.agent_name, role: d.role } } })
+            break
+          case 'agent_done':
+            dispatch({ type: 'UPDATE_AGENT', payload: { convId, id: d.subtask_id, data: { state: d.state, output: d.output, error: d.error, retry: d.retry_count } } })
+            if (d.state === 'completed' || d.state === 'failed') {
+              const c = state.conversations[convId]
+              dispatch({ type: 'SET_CONV_META', payload: { id: convId, meta: { completedAgents: (c.completedAgents||0) + 1 } } })
+            }
+            break
+          case 'done':
+            dispatch({ type: 'SET_CONNECTED', payload: false })
+            dispatch({ type: 'UPDATE_LAST_MSG', payload: { id: convId, updates: { content: d.summary || 'Complete', typing: false } } })
+            dispatch({ type: 'SET_CONV_META', payload: { id: convId, meta: { running: false } } })
+            if (eventSourceRef.current) eventSourceRef.current.close()
+            dispatch({ type: 'ADD_TOAST', payload: '✓ ' + t('complete') })
+            break
+          case 'error':
+            dispatch({ type: 'SET_CONNECTED', payload: false })
+            dispatch({ type: 'UPDATE_LAST_MSG', payload: { id: convId, updates: { content: 'Error: ' + d.msg, typing: false } } })
+            dispatch({ type: 'SET_CONV_META', payload: { id: convId, meta: { running: false } } })
+            break
+        }
+      }
+      eventSourceRef.current.onerror = () => {
+        dispatch({ type: 'SET_CONNECTED', payload: false })
+        dispatch({ type: 'SET_CONV_META', payload: { id: convId, meta: { running: false } } })
+      }
+    } catch (e) {
+      dispatch({ type: 'SET_CONNECTED', payload: false })
+      dispatch({ type: 'UPDATE_LAST_MSG', payload: { id: convId, updates: { content: t('loadError'), typing: false } } })
+    }
+  }, [t, eventSourceRef, state.conversations])
+
+  const value = { state, dispatch, t, eventSourceRef, runTask }
 
   return (
     <AppContext.Provider value={value}>
@@ -175,10 +227,7 @@ function ToastContainer() {
   const { state, dispatch } = useApp()
   return (
     <div className="toast-container">
-      {state.toasts.map(t=>{
-        setTimeout(()=>dispatch({type:'REMOVE_TOAST',payload:t.id}),3500)
-        return <div key={t.id} className="toast">{t.msg}</div>
-      })}
+      {state.toasts.map(t=>{setTimeout(()=>dispatch({type:'REMOVE_TOAST',payload:t.id}),3500);return <div key={t.id} className="toast">{t.msg}</div>})}
     </div>
   )
 }

@@ -2,7 +2,7 @@ import { useRef, useEffect, useState } from 'react'
 import { useApp } from '../App'
 
 export default function ChatArea() {
-  const { state, t, dispatch, eventSourceRef } = useApp()
+  const { state, t, dispatch, runTask } = useApp()
   const ref = useRef(null)
   const conv = state.activeConvId ? state.conversations[state.activeConvId] : null
   const [editingIdx, setEditingIdx] = useState(null)
@@ -16,38 +16,7 @@ export default function ChatArea() {
   const submitEdit = async () => {
     const text = editText.trim(); if (!text || !conv) return
     setEditingIdx(null)
-    // Append user message
-    dispatch({ type: 'APPEND_MSG', payload: { id: state.activeConvId, msg: { role: 'user', content: text } } })
-    // Append loading assistant message
-    dispatch({ type: 'APPEND_MSG', payload: { id: state.activeConvId, msg: { role: 'assistant', content: t('classifying'), typing: true } } })
-    try {
-      const r = await fetch('/run?query=' + encodeURIComponent(text) + '&conv_id=' + encodeURIComponent(state.activeConvId), { method: 'POST' })
-      const { task_id } = await r.json()
-      if (eventSourceRef.current) eventSourceRef.current.close()
-      dispatch({ type: 'SET_CONNECTED', payload: true })
-      eventSourceRef.current = new EventSource('/stream/' + task_id)
-      eventSourceRef.current.onmessage = (e) => {
-        const d = JSON.parse(e.data)
-        switch (d.type) {
-          case 'status': dispatch({ type: 'UPDATE_LAST_MSG', payload: { id: state.activeConvId, content: d.msg } }); break
-          case 'dag':
-            dispatch({ type: 'SET_TASK', payload: { total: d.subtasks.length } })
-            dispatch({ type: 'UPDATE_LAST_MSG', payload: { id: state.activeConvId, content: 'Decomposed into ' + d.subtasks.length + ' agents across ' + d.parallel_groups.length + ' groups.' } })
-            const convs = { ...state.conversations }
-            const c = convs[state.activeConvId]
-            const msgs = [...(c.messages || [])]
-            if (msgs.length) msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], dag: d }
-            convs[state.activeConvId] = { ...c, messages: msgs }
-            dispatch({ type: 'SET_MSGS', payload: { id: state.activeConvId, messages: msgs } })
-            break
-          case 'agent_start': dispatch({ type: 'UPDATE_AGENT', payload: { id: d.subtask_id, data: { state: 'running', name: d.agent_name } } }); break
-          case 'agent_done': dispatch({ type: 'UPDATE_AGENT', payload: { id: d.subtask_id, data: { state: d.state, output: d.output, error: d.error, retry: d.retry_count } } }); if (d.state === 'completed' || d.state === 'failed') dispatch({ type: 'INC_COMPLETED' }); break
-          case 'done': dispatch({ type: 'SET_CONNECTED', payload: false }); dispatch({ type: 'UPDATE_LAST_MSG', payload: { id: state.activeConvId, content: d.summary || 'Complete' } }); if (eventSourceRef.current) eventSourceRef.current.close(); dispatch({ type: 'ADD_TOAST', payload: '✓ ' + t('complete') }); break
-          case 'error': dispatch({ type: 'SET_CONNECTED', payload: false }); dispatch({ type: 'UPDATE_LAST_MSG', payload: { id: state.activeConvId, content: 'Error: ' + d.msg } }); break
-        }
-      }
-      eventSourceRef.current.onerror = () => dispatch({ type: 'SET_CONNECTED', payload: false })
-    } catch (e) { dispatch({ type: 'SET_CONNECTED', payload: false }); dispatch({ type: 'UPDATE_LAST_MSG', payload: { id: state.activeConvId, content: t('loadError') } }) }
+    await runTask(state.activeConvId, text)
   }
 
   if (!conv || !conv.messages?.length) {
@@ -149,7 +118,8 @@ function DAGView({ data }) {
 
 function AgentStepper() {
   const { state, dispatch, t } = useApp()
-  const agents = Object.entries(state.agentStates)
+  const conv = state.activeConvId ? state.conversations[state.activeConvId] : null
+  const agents = Object.entries(conv?.agents || {})
   if (!agents.length) return <div className="stepper"><div className="stepper-header"><span>{t('agents')}</span></div></div>
   return (
     <div className="stepper">

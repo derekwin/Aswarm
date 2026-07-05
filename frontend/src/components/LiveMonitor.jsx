@@ -8,9 +8,11 @@ export default function LiveMonitor() {
   const [viewFile, setViewFile] = useState(null)
 
   const convId = state.activeConvId
-  const agents = Object.values(state.agentStates)
-  const done = agents.filter(a => a.state === 'completed' || a.state === 'failed').length
-  const pct = state.totalAgents ? Math.round(done / state.totalAgents * 100) : 0
+  const conv = convId ? state.conversations[convId] : null
+  const agents = Object.values(conv?.agents || {})
+  const totalAgents = conv?.totalAgents || 0
+  const completedAgents = conv?.completedAgents || 0
+  const pct = totalAgents ? Math.round(completedAgents / totalAgents * 100) : 0
 
   useEffect(() => {
     if (tab === 'files' && convId) {
@@ -37,7 +39,7 @@ export default function LiveMonitor() {
         <div className="monitor-inner" style={{ width: 320 }}>
           <div className="monitor-header">
             <h3>Live Monitor</h3>
-            <span className="monitor-summary">{done}/{state.totalAgents}</span>
+            <span className="monitor-summary">{completedAgents}/{totalAgents}</span>
           </div>
           <div className="monitor-progress"><div className="monitor-progress-fill" style={{ width: pct + '%' }} /></div>
           <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
