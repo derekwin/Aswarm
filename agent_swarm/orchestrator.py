@@ -302,13 +302,11 @@ class SwarmOrchestrator:
                 has_search_tool = False  # prevent repeated forced-output messages
 
             try:
-                response = await self._call_llm_with_retry(
+                msg = await self._call_llm_with_retry(
                     model=agent.model,
                     messages=messages,
                     tools=active_tools,
                 )
-
-                msg = response.choices[0].message
 
                 if msg.tool_calls:
                     messages = await self._handle_tool_calls(agent, msg.tool_calls, messages)
