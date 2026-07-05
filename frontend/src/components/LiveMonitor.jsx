@@ -54,9 +54,9 @@ export default function LiveMonitor() {
           <div className="monitor-inner" style={{ width }}>
             <div className="monitor-header">
               <h3>Monitor</h3>
-              <span className="monitor-summary">{completedAgents}/{totalAgents}</span>
+              <span className="monitor-summary">{totalAgents > 0 ? completedAgents + '/' + totalAgents : ''}</span>
             </div>
-            <div className="monitor-progress"><div className="monitor-progress-fill" style={{ width: pct + '%' }} /></div>
+            <div className={'monitor-progress' + (totalAgents > 0 ? ' active' : '')}><div className="monitor-progress-fill" style={{ width: pct + '%' }} /></div>
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
               {['agents', 'files'].map(t => (
                 <button key={t} onClick={() => setTab(t)}
