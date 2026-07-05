@@ -109,7 +109,7 @@ export default function App() {
   // Shared task runner — called by both InputArea and ChatArea edit
   const runTask = useCallback(async (convId, query) => {
     dispatch({ type: 'APPEND_MSG', payload: { id: convId, msg: { role: 'user', content: query } } })
-    dispatch({ type: 'APPEND_MSG', payload: { id: convId, msg: { role: 'assistant', content: t('classifying'), typing: true } } })
+    dispatch({ type: 'APPEND_MSG', payload: { id: convId, msg: { role: 'assistant', content: 'Analyzing task...', typing: true } } })
     try {
       const r = await fetch('/run?query=' + encodeURIComponent(query) + '&conv_id=' + encodeURIComponent(convId), { method: 'POST' })
       const { task_id } = await r.json()
@@ -221,13 +221,13 @@ function SettingsModal() {
 }
 
 function AgentPanel() {
-  const { state, dispatch } = useApp()
+  const { state, dispatch, t } = useApp()
   if (!state.panelAgent) return null
   const a = state.panelAgent
   return (
     <div className="agent-panel open">
       <div className="agent-panel-header"><h3>{a.name}</h3><button className="agent-panel-close" onClick={()=>dispatch({type:'SET_PANEL',payload:null})}>✕</button></div>
-      <div className="agent-panel-content" dangerouslySetInnerHTML={{__html: renderMd((a.output||'')+(a.error?'\n[ERROR: '+a.error+']':'')+(a.retry?'\n'+I18N.en.retries+': '+a.retry:''))}} />
+      <div className="agent-panel-content" dangerouslySetInnerHTML={{__html: renderMd((a.output||'')+(a.error?'\n[ERROR: '+a.error+']':'')+(a.retry?'\n'+t('retries')+': '+a.retry:''))}} />
     </div>
   )
 }
