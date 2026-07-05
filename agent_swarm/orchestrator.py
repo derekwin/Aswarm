@@ -74,7 +74,7 @@ class SwarmOrchestrator:
         state_manager: StateManager,
         llm: LLMClient,
         max_subtask_retries: int = 2,
-        judge_model: str = "qwen3:4b",
+        judge_model: str = None,
     ):
         self.tools = tools
         self.factory = factory
@@ -455,13 +455,13 @@ class SwarmOrchestrator:
         if "search_engine" in tool_names:
             parts.extend([
                 "",
-                "## Search & Information Retrieval (MUST follow)",
-                "1. Step 1: Use search_engine to search",
-                "2. Step 2: Use webfetch to retrieve full page content from URLs in search results",
-                "3. Step 3: If webfetch yields no useful info, retry with different keywords",
-                "4. FORBIDDEN: searching without fetching, then claiming 'no information found'",
-                "5. After each search round, call webfetch at least once",
-                "6. CRITICAL: After 4 search rounds, STOP searching and produce your best output with whatever data you have. Do NOT exhaust all iterations searching.",
+                "## Search & Information Retrieval (MUST follow strictly)",
+                "1. Use search_engine to search — this gives you URLs and short snippets only",
+                "2. IMMEDIATELY call webfetch on the top 2-3 URLs to read full page content",
+                "   The snippets from search are NOT enough. You MUST read the actual pages.",
+                "3. Extract specific data, numbers, and facts from the pages you fetch",
+                "4. If pages have no useful data, search with different keywords and try again",
+                "5. After 4 rounds, STOP and output best available information",
             ])
         
         return "\n".join(parts)
