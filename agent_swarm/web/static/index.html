@@ -18,14 +18,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
 ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #262626; border-radius: 4px; }
 .sidebar-open .sidebar-overlay { display: block; }
 @media (min-width: 768px) { .sidebar-overlay { display: none !important; } }
+.progress-bar { transition: width 0.3s ease; }
+.conv-item:hover .conv-delete { opacity: 1; }
+.conv-delete { opacity: 0; transition: opacity 0.15s; }
+.md-bold { font-weight: 600; color: #ececec; }
+.md-code { background: #0a0a0a; border: 1px solid #262626; border-radius: 6px; padding: 1px 6px; font-size: 0.8em; font-family: 'SF Mono', 'Fira Code', monospace; }
+.md-codeblock { background: #0a0a0a; border: 1px solid #262626; border-radius: 8px; padding: 10px 14px; font-size: 0.78rem; font-family: 'SF Mono', 'Fira Code', monospace; white-space: pre-wrap; overflow-x: auto; margin: 6px 0; }
 </style>
 </head>
 <body class="bg-[#0d0d0d] text-[#ececec] h-screen flex overflow-hidden">
 
-<!-- Sidebar overlay for mobile -->
 <div class="sidebar-overlay hidden fixed inset-0 bg-black/60 z-20 md:hidden" onclick="toggleSidebar()"></div>
 
-<!-- Sidebar -->
 <aside id="sidebar" class="w-72 bg-[#0a0a0a] border-r border-border flex flex-col flex-shrink-0 fixed md:static inset-y-0 left-0 z-30 transform -translate-x-full md:translate-x-0 transition-transform duration-300">
   <div class="p-5 flex items-center gap-3 border-b border-border">
     <div class="w-7 h-7 bg-gradient-to-br from-accent to-[#a78bfa] rounded-lg flex items-center justify-center text-sm flex-shrink-0">⚡</div>
@@ -39,7 +43,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
   </div>
 </aside>
 
-<!-- Main -->
 <main class="flex-1 flex flex-col min-w-0">
   <header class="px-4 sm:px-5 lg:px-7 py-3 sm:py-4 border-b border-border flex items-center justify-between flex-shrink-0">
     <div class="flex items-center gap-3">
@@ -48,21 +51,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
       </button>
       <h3 id="convTitle" class="text-sm font-semibold tracking-tight">New Task</h3>
     </div>
-    <span class="text-[10px] sm:text-xs px-2 sm:px-3 py-1 sm:py-1.5 bg-surface border border-border rounded-full text-[#999] hidden sm:inline">qwen3.5:35b</span>
+    <div class="flex items-center gap-3">
+      <span id="connDot" class="w-1.5 h-1.5 rounded-full bg-[#333]" title="Disconnected"></span>
+      <span class="text-[10px] sm:text-xs px-2 sm:px-3 py-1 sm:py-1.5 bg-surface border border-border rounded-full text-[#999] hidden sm:inline">qwen3.5:35b</span>
+    </div>
   </header>
 
-  <div id="chatArea" class="flex-1 overflow-y-auto px-4 sm:px-5 lg:px-7 py-6 sm:py-8 flex flex-col gap-5 sm:gap-7">
-    <div class="flex flex-col items-center justify-center flex-1 gap-4 sm:gap-5" id="emptyState">
-      <div class="w-12 h-12 sm:w-14 sm:h-14 bg-[rgba(108,92,231,0.12)] rounded-full flex items-center justify-center text-xl sm:text-2xl">✦</div>
-      <h2 class="text-lg sm:text-xl font-semibold tracking-tight text-center">What do you want to research?</h2>
-      <p class="text-[#999] text-xs sm:text-sm max-w-xs sm:max-w-md text-center leading-relaxed px-2">Describe your task. AgentSwarm decomposes it, spawns specialized agents, and executes them in parallel.</p>
-      <div class="flex gap-2 flex-wrap justify-center px-2">
-        <button onclick="suggest('调研2025年国产AI芯片市场并生成分析报告')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[#999] text-[11px] sm:text-xs transition">国产芯片市场调研</button>
-        <button onclick="suggest('对比分析 React 和 Vue 在2025年的生态和发展趋势')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[#999] text-[11px] sm:text-xs transition">React vs Vue</button>
-        <button onclick="suggest('写一篇关于大语言模型发展的技术报告')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[#999] text-[11px] sm:text-xs transition">LLM技术报告</button>
-      </div>
-    </div>
+  <div id="progressBar" class="h-0.5 bg-border flex-shrink-0 hidden">
+    <div id="progressFill" class="h-full bg-accent progress-bar" style="width:0%"></div>
   </div>
+
+  <div id="chatArea" class="flex-1 overflow-y-auto px-4 sm:px-5 lg:px-7 py-6 sm:py-8 flex flex-col gap-5 sm:gap-7"></div>
 
   <div class="px-3 sm:px-5 lg:px-7 py-3 sm:py-4 border-t border-border flex-shrink-0">
     <div class="flex gap-2 sm:gap-3 max-w-3xl mx-auto items-end">
@@ -76,13 +75,94 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
 </main>
 
 <script>
-let conversations = {}, activeConvId = null, eventSource = null, agentStates = {};
+var conversations = {}, activeConvId = null, eventSource = null, agentStates = {};
+var totalAgents = 0, completedAgents = 0;
+
+document.addEventListener('keydown', function(e) {
+  if ((e.ctrlKey||e.metaKey) && e.key==='n') { e.preventDefault(); newConversation(); }
+});
+
+function emptyStateHTML(sm) {
+  return '<div class="flex flex-col items-center justify-center flex-1 gap-4 sm:gap-5">'+
+    '<div class="w-12 h-12 sm:w-14 sm:h-14 bg-[rgba(108,92,231,0.12)] rounded-full flex items-center justify-center text-xl sm:text-2xl">✦</div>'+
+    '<h2 class="text-lg sm:text-xl font-semibold tracking-tight text-center">What do you want to research?</h2>'+
+    '<p class="text-[#999] text-xs sm:text-sm max-w-xs sm:max-w-md text-center leading-relaxed px-2">Describe your task. AgentSwarm decomposes it, spawns specialized agents, and executes them in parallel.</p>'+
+    '<div class="flex gap-2 flex-wrap justify-center px-2">'+
+    '<button onclick="suggest(\'调研2025年国产AI芯片市场并生成分析报告\')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[#999] text-[11px] sm:text-xs transition">国产芯片市场调研</button>'+
+    '<button onclick="suggest(\'对比分析 React 和 Vue 在2025年的生态和发展趋势\')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[#999] text-[11px] sm:text-xs transition">React vs Vue</button>'+
+    '<button onclick="suggest(\'写一篇关于大语言模型发展的技术报告\')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-border bg-surface hover:border-accent hover:text-white text-[#999] text-[11px] sm:text-xs transition">LLM报告</button>'+
+    '</div></div>';
+}
+
+function init() { document.getElementById('chatArea').innerHTML = emptyStateHTML(); }
+init();
+
+function setConnected(on) {
+  document.getElementById('connDot').className = 'w-1.5 h-1.5 rounded-full ' + (on ? 'bg-green' : 'bg-[#333]');
+  document.getElementById('connDot').title = on ? 'Connected' : 'Disconnected';
+}
+
+function updateProgress() {
+  var bar = document.getElementById('progressBar'), fill = document.getElementById('progressFill');
+  if (totalAgents === 0) { bar.classList.add('hidden'); return; }
+  bar.classList.remove('hidden');
+  fill.style.width = Math.round(completedAgents / totalAgents * 100) + '%';
+}
 
 function toggleSidebar() {
   var s = document.getElementById('sidebar');
   s.classList.toggle('-translate-x-full');
   document.body.classList.toggle('sidebar-open');
 }
+
+function newConversation() {
+  if (eventSource) eventSource.close();
+  var id = 'conv_' + Date.now();
+  conversations[id] = { title: 'New Task', msgs: [], time: new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) };
+  activeConvId = id;
+  renderConvs();
+  document.getElementById('chatArea').innerHTML = emptyStateHTML();
+  document.getElementById('convTitle').textContent = 'New Task';
+  document.getElementById('submitBtn').disabled = false;
+  agentStates = {}; totalAgents = 0; completedAgents = 0; updateProgress();
+}
+
+function deleteConversation(id, e) {
+  e.stopPropagation();
+  if (!confirm('Delete this conversation?')) return;
+  delete conversations[id];
+  if (activeConvId === id) {
+    var ids = Object.keys(conversations);
+    if (ids.length) { switchConversation(ids[ids.length-1]); }
+    else { activeConvId = null; document.getElementById('chatArea').innerHTML = emptyStateHTML(); document.getElementById('convTitle').textContent = 'New Task'; }
+  }
+  renderConvs();
+}
+
+function switchConversation(id) {
+  if (eventSource) eventSource.close();
+  if (conversations[activeConvId]) conversations[activeConvId]._html = document.getElementById('chatArea').innerHTML;
+  activeConvId = id; agentStates = {}; totalAgents = 0; completedAgents = 0; updateProgress();
+  var c = conversations[id];
+  document.getElementById('convTitle').textContent = c.title;
+  document.getElementById('chatArea').innerHTML = c._html || (c.msgs && c.msgs.length ? c.msgs.join('') : emptyStateHTML());
+  renderConvs();
+  document.getElementById('submitBtn').disabled = false;
+}
+
+function renderConvs() {
+  var l = document.getElementById('convList'), ids = Object.keys(conversations);
+  if (!ids.length) { l.innerHTML = '<div class="text-center py-6 text-[#666] text-xs">No conversations yet</div>'; return; }
+  l.innerHTML = ids.map(function(id) {
+    var c = conversations[id], active = id === activeConvId;
+    return '<div class="conv-item px-3 py-2.5 rounded-lg cursor-pointer text-xs transition mb-0.5 flex items-center justify-between group' + (active ? ' bg-surface' : ' hover:bg-surface') + '" onclick="switchConversation(\'' + id + '\')">' +
+      '<div class="truncate flex-1"><span class="' + (active ? 'text-white font-medium' : 'text-[#999]') + '">' + esc(c.title) + '</span><div class="text-[10px] text-[#555]">' + c.time + '</div></div>' +
+      '<span class="conv-delete ml-2 px-1.5 py-0.5 rounded hover:bg-red/20 text-[#555] hover:text-red text-[10px] flex-shrink-0" onclick="deleteConversation(\'' + id + '\', event)">✕</span>' +
+      '</div>';
+  }).join('');
+}
+
+function suggest(t) { document.getElementById('queryInput').value = t; document.getElementById('queryInput').focus(); }
 
 function loadMermaid(cb) {
   if (window.mermaid) return cb();
@@ -92,88 +172,176 @@ function loadMermaid(cb) {
   document.head.appendChild(s);
 }
 
-function newConversation() { if(eventSource)eventSource.close(); var id='conv_'+Date.now(); conversations[id]={title:'New Task',msgs:[]}; activeConvId=id; renderConvs(); document.getElementById('chatArea').innerHTML=`<div class="flex flex-col items-center justify-center flex-1 gap-5"><div class="w-14 h-14 bg-[rgba(108,92,231,0.12)] rounded-full flex items-center justify-center text-2xl">✦</div><h2 class="text-xl font-semibold tracking-tight">What do you want to research?</h2><p class="text-[#999] text-sm max-w-md text-center leading-relaxed">Describe your task to begin.</p></div>`; document.getElementById('convTitle').textContent='New Task'; document.getElementById('submitBtn').disabled=false; agentStates={}; }
+function submitTask() {
+  var q = document.getElementById('queryInput').value.trim();
+  if (!q) return;
+  if (!activeConvId) newConversation();
+  document.getElementById('submitBtn').disabled = true;
+  document.getElementById('queryInput').value = '';
+  var chat = document.getElementById('chatArea');
+  var ee = chat.querySelector('.flex-col.items-center.justify-center');
+  if (ee) chat.innerHTML = '';
 
-function switchConversation(id) { if(eventSource)eventSource.close(); if(conversations[activeConvId]) conversations[activeConvId]._html=document.getElementById('chatArea').innerHTML; activeConvId=id; agentStates={}; var c=conversations[id]; document.getElementById('convTitle').textContent=c.title; var h=c._html||(c.msgs&&c.msgs.length?c.msgs.join(''):''); document.getElementById('chatArea').innerHTML=h||`<div class="flex flex-col items-center justify-center flex-1 gap-5"><div class="w-14 h-14 bg-[rgba(108,92,231,0.12)] rounded-full flex items-center justify-center text-2xl">✦</div><h2 class="text-xl font-semibold tracking-tight">What do you want to research?</h2><p class="text-[#999] text-sm max-w-md text-center leading-relaxed">Describe your task to begin.</p></div>`; renderConvs(); document.getElementById('submitBtn').disabled=false; }
-
-function renderConvs() { var l=document.getElementById('convList'),ids=Object.keys(conversations); if(!ids.length){l.innerHTML='<div class="text-center py-6 text-[#666] text-xs">No conversations yet</div>';return;} l.innerHTML=ids.map(function(id){return'<div class="px-3 py-2.5 rounded-lg cursor-pointer text-xs text-[#999] hover:bg-surface hover:text-white transition mb-0.5 truncate'+(id===activeConvId?' bg-surface text-white font-medium':'')+'" onclick="switchConversation(\''+id+'\')">'+esc(conversations[id].title)+'</div>';}).join(''); }
-
-function suggest(t){document.getElementById('queryInput').value=t;document.getElementById('queryInput').focus();}
-
-function submitTask(){
-  var q=document.getElementById('queryInput').value.trim(); if(!q)return;
-  if(!activeConvId) newConversation();
-  document.getElementById('submitBtn').disabled=true; document.getElementById('queryInput').value='';
-  var chat=document.getElementById('chatArea'),ee=chat.querySelector('.flex-col.items-center.justify-center'); if(ee)chat.innerHTML='';
-  if(conversations[activeConvId].title==='New Task'){conversations[activeConvId].title=q.slice(0,40);document.getElementById('convTitle').textContent=q.slice(0,40);renderConvs();}
-  var u='<div class="fade-up flex gap-3.5 max-w-3xl self-end flex-row-reverse"><div class="px-4 py-3.5 bg-[#2d2a5e] text-[#e8e4ff] rounded-2xl rounded-br-md text-sm leading-relaxed">'+esc(q)+'</div><div class="w-8 h-8 rounded-[10px] bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex-shrink-0 flex items-center justify-center text-xs font-bold">U</div></div>';
-  chat.insertAdjacentHTML('beforeend',u); conversations[activeConvId].msgs.push(u);
-  var aid='asst-'+Date.now(),a='<div class="fade-up flex gap-3.5 max-w-3xl self-start" id="'+aid+'"><div class="w-8 h-8 rounded-[10px] bg-gradient-to-br from-accent to-[#a78bfa] flex-shrink-0 flex items-center justify-center text-xs font-bold">S</div><div class="flex-1 min-w-0"><div class="px-4 py-3.5 bg-surface border border-border rounded-2xl rounded-bl-md text-sm leading-relaxed"><span class="typing text-[#666]">Planning task decomposition</span></div><div id="st-'+aid+'"></div></div></div>';
-  chat.insertAdjacentHTML('beforeend',a); conversations[activeConvId].msgs.push(a); chat.scrollTop=chat.scrollHeight;
-  var b=document.querySelector('#'+aid+' .bg-surface'),st=document.getElementById('st-'+aid);
-  fetch('/run?query='+encodeURIComponent(q),{method:'POST'}).then(function(r){return r.json();}).then(function(d){
-    if(eventSource)eventSource.close();
-    eventSource=new EventSource('/stream/'+d.task_id);
-    eventSource.onmessage=function(e){handleEvent(JSON.parse(e.data),b,st,chat);};
-    eventSource.onerror=function(){b.innerHTML='Connection lost.';document.getElementById('submitBtn').disabled=false;};
-  });
-}
-
-function handleEvent(d,b,st,chat){
-  console.log('[AgentSwarm]',d.type,d.subtask_id||'',d.msg||'');
-  switch(d.type){
-    case'status':b.innerHTML='<span class="typing text-[#666]">'+esc(d.msg)+'</span>';break;
-    case'dag':b.innerHTML='Decomposed into <strong>'+d.subtasks.length+' agents</strong> across <strong>'+d.parallel_groups.length+' parallel groups</strong>.';loadMermaid(function(){renderStepper(st,d);});break;
-    case'agent_start':agentStates[d.subtask_id]={state:'running',name:d.agent_name,role:d.role};updateStep(d.subtask_id);break;
-    case'agent_done':agentStates[d.subtask_id]={state:d.state,name:agentStates[d.subtask_id]?agentStates[d.subtask_id].name:d.subtask_id,role:agentStates[d.subtask_id]?agentStates[d.subtask_id].role:'',output:d.output,error:d.error,retry:d.retry_count};updateStep(d.subtask_id);break;
-    case'done':b.innerHTML='<strong>Complete.</strong> '+(d.results?d.results.filter(function(r){return r.state==='completed';}).length:0)+'/'+(d.results?d.results.length:0)+' agents finished.';if(d.summary){var s=document.createElement('div');s.className='mt-3 p-3.5 bg-[#0a0a0a] rounded-lg text-xs leading-relaxed whitespace-pre-wrap max-h-[500px] overflow-y-auto';s.textContent=d.summary;b.appendChild(s);}document.getElementById('submitBtn').disabled=false;if(eventSource)eventSource.close();agentStates={};break;
-    case'error':b.innerHTML='<span class="text-red">'+esc(d.msg)+'</span>';document.getElementById('submitBtn').disabled=false;break;
+  if (conversations[activeConvId].title === 'New Task') {
+    conversations[activeConvId].title = q.slice(0, 40);
+    document.getElementById('convTitle').textContent = q.slice(0, 40);
+    renderConvs();
   }
-  chat.scrollTop=chat.scrollHeight;
+
+  var u = '<div class="fade-up flex gap-3.5 max-w-3xl self-end flex-row-reverse"><div class="px-4 py-3.5 bg-[#2d2a5e] text-[#e8e4ff] rounded-2xl rounded-br-md text-sm leading-relaxed">' + esc(q) + '</div><div class="w-8 h-8 rounded-[10px] bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex-shrink-0 flex items-center justify-center text-xs font-bold">U</div></div>';
+  chat.insertAdjacentHTML('beforeend', u);
+  conversations[activeConvId].msgs.push(u);
+
+  var aid = 'asst-' + Date.now();
+  var a = '<div class="fade-up flex gap-3.5 max-w-3xl self-start" id="' + aid + '"><div class="w-8 h-8 rounded-[10px] bg-gradient-to-br from-accent to-[#a78bfa] flex-shrink-0 flex items-center justify-center text-xs font-bold">S</div><div class="flex-1 min-w-0"><div class="px-4 py-3.5 bg-surface border border-border rounded-2xl rounded-bl-md text-sm leading-relaxed"><span class="typing text-[#666]">Classifying task</span></div><div id="st-' + aid + '"></div></div></div>';
+  chat.insertAdjacentHTML('beforeend', a);
+  conversations[activeConvId].msgs.push(a);
+  chat.scrollTop = chat.scrollHeight;
+
+  var b = document.querySelector('#' + aid + ' .bg-surface');
+  var st = document.getElementById('st-' + aid);
+
+  setConnected(false);
+  fetch('/run?query=' + encodeURIComponent(q), { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (eventSource) eventSource.close();
+      eventSource = new EventSource('/stream/' + d.task_id);
+      setConnected(true);
+      eventSource.onmessage = function(e) { handleEvent(JSON.parse(e.data), b, st, chat); };
+      eventSource.onerror = function() { setConnected(false); b.innerHTML = 'Connection lost.'; document.getElementById('submitBtn').disabled = false; };
+    })
+    .catch(function() { setConnected(false); b.innerHTML = 'Server error.'; document.getElementById('submitBtn').disabled = false; });
 }
 
-function renderStepper(st,d){
-  st.innerHTML=''; var bl=document.createElement('div'); bl.className='mt-4';
-  var dag=document.createElement('div'); dag.className='bg-[#0a0a0a] border border-border rounded-xl p-3.5 mb-3';
-  var mm='graph LR\n';
-  for(var gi=0;gi<d.parallel_groups.length;gi++){mm+='  subgraph G'+(gi+1)+'[G'+(gi+1)+']\n    style G'+(gi+1)+' fill:#0a0a0a,stroke:#262626\n';for(var ti=0;ti<d.parallel_groups[gi].length;ti++){var tid=d.parallel_groups[gi][ti],sd=d.subtasks.find(function(x){return x.id===tid;})||{};mm+='    '+tid+'["'+esc((sd.name||tid).slice(0,18))+'"]\n';}mm+='  end\n';}
-  for(var si=0;si<d.subtasks.length;si++){var s=d.subtasks[si];for(var di=0;di<s.depends_on.length;di++){mm+='  '+s.depends_on[di]+' --> '+s.id+'\n';}}
-  dag.innerHTML='<div class="mermaid">'+mm+'</div>'; bl.appendChild(dag);
-  var hd=document.createElement('div'); hd.className='flex items-center gap-2 mb-2.5';
-  hd.innerHTML='<span class="text-xs font-semibold text-[#999]">Agents</span><span class="text-[10px] px-2 py-0.5 rounded-md bg-[rgba(108,92,231,0.15)] text-accent font-medium">'+d.parallel_groups.length+' groups</span>';
+function handleEvent(d, b, st, chat) {
+  console.log('[AgentSwarm]', d.type, d.subtask_id || '', d.msg || '');
+  switch (d.type) {
+    case 'status':
+      b.innerHTML = '<span class="typing text-[#666]">' + esc(d.msg) + '</span>';
+      break;
+    case 'dag':
+      totalAgents = d.subtasks.length;
+      completedAgents = 0;
+      updateProgress();
+      b.innerHTML = 'Decomposed into <strong>' + d.subtasks.length + ' agents</strong> across <strong>' + d.parallel_groups.length + ' parallel groups</strong>.';
+      loadMermaid(function() { renderStepper(st, d); });
+      break;
+    case 'agent_start':
+      agentStates[d.subtask_id] = { state: 'running', name: d.agent_name, role: d.role };
+      updateStep(d.subtask_id);
+      break;
+    case 'agent_done':
+      agentStates[d.subtask_id] = { state: d.state, name: agentStates[d.subtask_id] ? agentStates[d.subtask_id].name : d.subtask_id, role: agentStates[d.subtask_id] ? agentStates[d.subtask_id].role : '', output: d.output, error: d.error, retry: d.retry_count };
+      updateStep(d.subtask_id);
+      if (d.state === 'completed' || d.state === 'failed') { completedAgents++; updateProgress(); }
+      break;
+    case 'done':
+      completedAgents = totalAgents;
+      updateProgress();
+      setConnected(false);
+      b.innerHTML = '<strong>Complete.</strong> ' + (d.results ? d.results.filter(function(r) { return r.state === 'completed'; }).length : 0) + '/' + (d.results ? d.results.length : 0) + ' agents finished.';
+      if (d.summary) {
+        var s = document.createElement('div');
+        s.className = 'mt-3 p-3.5 bg-[#0a0a0a] rounded-lg text-xs leading-relaxed whitespace-pre-wrap max-h-[500px] overflow-y-auto';
+        s.innerHTML = mdRender(d.summary);
+        b.appendChild(s);
+      }
+      document.getElementById('submitBtn').disabled = false;
+      if (eventSource) eventSource.close();
+      agentStates = {};
+      break;
+    case 'error':
+      setConnected(false);
+      b.innerHTML = '<span class="text-red">' + esc(d.msg) + '</span>';
+      document.getElementById('submitBtn').disabled = false;
+      break;
+  }
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function renderStepper(st, d) {
+  st.innerHTML = '';
+  var bl = document.createElement('div');
+  bl.className = 'mt-4';
+
+  var dag = document.createElement('div');
+  dag.className = 'bg-[#0a0a0a] border border-border rounded-xl p-3.5 mb-3';
+  var mm = 'graph LR\n';
+  var colors = ['#6c5ce7','#00d26a','#f5a623','#f93a3a','#4f8fff','#a78bfa'];
+  for (var gi = 0; gi < d.parallel_groups.length; gi++) {
+    mm += '  subgraph G' + (gi + 1) + '[G' + (gi + 1) + ']\n    style G' + (gi + 1) + ' fill:#0a0a0a,stroke:' + colors[gi % colors.length] + '\n';
+    for (var ti = 0; ti < d.parallel_groups[gi].length; ti++) {
+      var tid = d.parallel_groups[gi][ti], sd = d.subtasks.find(function(x) { return x.id === tid; }) || {};
+      mm += '    ' + tid + '["' + esc((sd.name || tid).slice(0, 18)) + '"]\n';
+    }
+    mm += '  end\n';
+  }
+  for (var si = 0; si < d.subtasks.length; si++) {
+    var s = d.subtasks[si];
+    for (var di = 0; di < s.depends_on.length; di++) { mm += '  ' + s.depends_on[di] + ' --> ' + s.id + '\n'; }
+  }
+  dag.innerHTML = '<div class="mermaid">' + mm + '</div>';
+  bl.appendChild(dag);
+
+  var hd = document.createElement('div');
+  hd.className = 'flex items-center gap-2 mb-2.5';
+  hd.innerHTML = '<span class="text-xs font-semibold text-[#999]">Agents</span><span class="text-[10px] px-2 py-0.5 rounded-md bg-[rgba(108,92,231,0.15)] text-accent font-medium">' + d.parallel_groups.length + ' groups</span>';
   bl.appendChild(hd);
-  var ss=document.createElement('div'); ss.className='flex flex-col gap-0.5';
-  for(var si2=0;si2<d.subtasks.length;si2++){var s2=d.subtasks[si2],gIdx=d.parallel_groups.findIndex(function(g){return g.includes(s2.id);});
-    var sp=document.createElement('div'); sp.className='step flex items-center gap-3 px-3 py-2.5 rounded-lg transition hover:bg-[rgba(255,255,255,0.02)] cursor-default pending'; sp.id='step-'+s2.id;
-    sp.innerHTML='<div class="step-dot w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] border-2 border-border text-[#666]">'+(parseInt(s2.id.replace('t',''))||'')+'</div><div class="flex-1 min-w-0"><div class="text-xs font-medium">'+s2.name.replace(/_/g,' ')+'</div><div class="text-[10px] text-[#666] mt-0.5">G'+(gIdx+1)+' · '+s2.tools.join(', ')+'</div></div>';
-    sp.addEventListener('click',function(tid){return function(){toggleStepDetail(tid);};}(s2.id));
+
+  var ss = document.createElement('div');
+  ss.className = 'flex flex-col gap-0.5';
+  for (var si2 = 0; si2 < d.subtasks.length; si2++) {
+    var s2 = d.subtasks[si2], gIdx = d.parallel_groups.findIndex(function(g) { return g.includes(s2.id); });
+    var sp = document.createElement('div');
+    sp.className = 'step flex items-center gap-3 px-3 py-2.5 rounded-lg transition hover:bg-[rgba(255,255,255,0.02)] cursor-default pending';
+    sp.id = 'step-' + s2.id;
+    sp.innerHTML = '<div class="step-dot w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] border-2 border-border text-[#666]">' + (parseInt(s2.id.replace('t', '')) || '') + '</div><div class="flex-1 min-w-0"><div class="text-xs font-medium">' + s2.name.replace(/_/g, ' ') + '</div><div class="text-[10px] text-[#666] mt-0.5">G' + (gIdx + 1) + ' · ' + s2.tools.join(', ') + '</div></div>';
+    sp.addEventListener('click', function(tid) { return function() { toggleStepDetail(tid); }; }(s2.id));
     ss.appendChild(sp);
   }
-  bl.appendChild(ss); st.appendChild(bl);
+  bl.appendChild(ss);
+  st.appendChild(bl);
 }
 
-function updateStep(tid){
-  var sp=document.getElementById('step-'+tid); if(!sp)return;
-  var inf=agentStates[tid]; sp.className=sp.className.replace(/pending|running|completed|failed/g,inf.state);
-  if(inf.state==='running') sp.className+=' step-running';
-  if(inf.state==='completed'||inf.state==='failed') sp.className+=' cursor-pointer';
-  var dot=sp.querySelector('.step-dot'); dot.textContent=inf.state==='completed'?'✓':inf.state==='failed'?'✗':dot.textContent;
-  dot.className='step-dot w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px]';
-  if(inf.state==='completed') dot.className+=' bg-green border-green text-white';
-  else if(inf.state==='failed') dot.className+=' bg-red border-red text-white';
-  else if(inf.state==='running') dot.className+=' border-accent text-accent bg-[rgba(108,92,231,0.15)]';
-  else dot.className+=' border-border text-[#666]';
+function updateStep(tid) {
+  var sp = document.getElementById('step-' + tid);
+  if (!sp) return;
+  var inf = agentStates[tid];
+  sp.className = sp.className.replace(/pending|running|completed|failed/g, inf.state);
+  if (inf.state === 'running') sp.className += ' step-running';
+  if (inf.state === 'completed' || inf.state === 'failed') sp.className += ' cursor-pointer';
+  var dot = sp.querySelector('.step-dot');
+  dot.textContent = inf.state === 'completed' ? '✓' : inf.state === 'failed' ? '✗' : dot.textContent;
+  dot.className = 'step-dot w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px]';
+  if (inf.state === 'completed') dot.className += ' bg-green border-green text-white';
+  else if (inf.state === 'failed') dot.className += ' bg-red border-red text-white';
+  else if (inf.state === 'running') dot.className += ' border-accent text-accent bg-[rgba(108,92,231,0.15)]';
+  else dot.className += ' border-border text-[#666]';
 }
 
-function toggleStepDetail(tid){
-  var inf=agentStates[tid]; if(!inf||(!inf.output&&!inf.error))return;
-  var el=document.getElementById('dt-'+tid);
-  if(!el){el=document.createElement('div');el.className='step-detail px-3 py-2 pb-3 text-xs text-[#999] whitespace-pre-wrap border-b border-border mb-1';el.id='dt-'+tid;var sp=document.getElementById('step-'+tid);sp.parentNode.insertBefore(el,sp.nextSibling);}
-  el.textContent=(inf.output||'')+(inf.error?'\n[ERROR: '+inf.error+']':'')+(inf.retry?'\nRetries: '+inf.retry:'');
+function toggleStepDetail(tid) {
+  var inf = agentStates[tid];
+  if (!inf || (!inf.output && !inf.error)) return;
+  var el = document.getElementById('dt-' + tid);
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'step-detail px-3 py-2 pb-3 text-xs text-[#999] whitespace-pre-wrap border-b border-border mb-1';
+    el.id = 'dt-' + tid;
+    document.getElementById('step-' + tid).parentNode.insertBefore(el, document.getElementById('step-' + tid).nextSibling);
+  }
+  el.innerHTML = mdRender((inf.output || '') + (inf.error ? '\n[ERROR: ' + inf.error + ']' : '') + (inf.retry ? '\nRetries: ' + inf.retry : ''));
   el.classList.toggle('show');
 }
 
-function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function mdRender(text) {
+  return esc(text)
+    .replace(/```(\w*)\n([\s\S]*?)```/g, '<div class="md-codeblock">$2</div>')
+    .replace(/\*\*(.+?)\*\*/g, '<span class="md-bold">$1</span>')
+    .replace(/`([^`]+)`/g, '<code class="md-code">$1</code>');
+}
+
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 </script>
 </body>
 </html>
