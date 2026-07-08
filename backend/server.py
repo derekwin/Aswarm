@@ -21,7 +21,8 @@ from agent_swarm import (
     SwarmState,
     TaskDAG,
 )
-from agent_swarm.infrastructure.llm_client import LLMClient
+from agent_swarm.budget import BudgetTracker
+from agent_swarm.infrastructure.llm_client import LLMClient, BudgetExceededError
 from agent_swarm.infrastructure.tool_registry import ToolRegistry
 from agent_swarm.trace import trace
 
@@ -88,6 +89,7 @@ _default_settings = {
     "llm_api_key": os.environ.get("AGENTSWARM_LLM_API_KEY", "ollama"),
     "decomposer_model": os.environ.get("AGENTSWARM_DECOMPOSER_MODEL", "qwen3:8b"),
     "default_model": os.environ.get("AGENTSWARM_DEFAULT_MODEL", "qwen3:8b"),
+    "budget_token_limit": int(os.environ.get("AGENTSWARM_BUDGET_TOKENS", "200000")),
 }
 
 
@@ -505,6 +507,10 @@ async def _execute_task(task_id: str, conv_id: str, query: str, lang: str = "en"
             checkpoint_dir=os.environ.get("AGENTSWARM_CHECKPOINT_DIR", "./checkpoints"),
         )
 
+        # Budget tracking
+        budget = BudgetTracker(token_limit=int(settings.get("budget_token_limit", 200000)))
+        llm.set_budget(budget)
+
         scheduler = MetaScheduler(
             llm=llm,
             decomposer_model=settings["decomposer_model"],
@@ -618,9 +624,16 @@ async def _execute_task(task_id: str, conv_id: str, query: str, lang: str = "en"
         _push_event(task_id, {
             "type": "done", "summary": summary, "results": results,
         })
+        # Emit budget summary
+        budget_summary = budget.summary()
+        if budget_summary["total_tokens"] > 0:
+            _push_event(task_id, {"type": "status", "msg": f"Budget: {budget_summary['total_tokens']:,}/{budget_summary['token_limit']:,} tokens ({budget_summary['usage_pct']}%), est. ${budget_summary['estimated_cost']:.2f}"})
         trace.record("task_complete", task_id, data={"results": len(results)})
         trace.flush(task_id)
 
+    except BudgetExceededError as e:
+        await storage.update_task(task_id, "failed")
+        _push_event(task_id, {"type": "error", "msg": str(e), "code": "BUDGET_EXCEEDED"})
     except Exception as e:
         error_code = _classify_error(e)
         logger.exception(f"Task {task_id} failed")
@@ -703,6 +716,8 @@ async def _execute_rerun(task_id: str, conv_id: str, query: str, subtasks: list,
 
 def _classify_error(e: Exception) -> str:
     msg = str(e).lower()
+    if "budget" in msg and ("exceeded" in msg or "exhausted" in msg):
+        return "BUDGET_EXCEEDED"
     if "timeout" in msg or "timed out" in msg:
         return "TIMEOUT"
     if "connection" in msg or "refused" in msg or "reset" in msg:

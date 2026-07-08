@@ -8,6 +8,7 @@ from typing import Any
 
 from agent_swarm.agent_factory import Agent, AgentFactory
 from agent_swarm.context import get_context
+from agent_swarm.data_buffer import DataBuffer, KeyContract
 from agent_swarm.infrastructure.llm_client import LLMClient
 from agent_swarm.infrastructure.tool_registry import ToolRegistry
 from agent_swarm.judge import (
@@ -103,6 +104,10 @@ class SwarmOrchestrator:
 
     async def _execute_from_state(self, state: SwarmState) -> SwarmState:
         dag = state.dag
+        data_buffer = DataBuffer()
+        total_subtasks = len(dag.subtasks)
+        consecutive_group_failures = 0
+        MAX_GROUP_FAILURES_BEFORE_REDECOMPOSE = 2
 
         while state.current_group < len(dag.parallel_groups):
             if self._check_cancelled():
@@ -132,7 +137,15 @@ class SwarmOrchestrator:
                 for subtask_id in pending_ids:
                     subtask = self._find_subtask(dag, subtask_id)
                     agent = self.factory.create(subtask.agent_config)
-                    context = self._gather_context(state, subtask.depends_on)
+                    # Build context from upstream results via DataBuffer
+                    upstream_context = self._gather_context(state, subtask.depends_on)
+                    # Also build DataBuffer context for agents that declare reads
+                    contract = KeyContract(
+                        reads=subtask.depends_on,
+                        writes=[subtask_id],
+                    )
+                    buffer_context = data_buffer.build_context(contract) if subtask.depends_on else ""
+                    context = upstream_context + ("\n\n## Upstream Data\n" + buffer_context if buffer_context else "")
                     prompt = subtask.prompt
                     if attempt > 0 and subtask_id in results:
                         prompt = self._regenerate_prompt(subtask.prompt, results[subtask_id], attempt)
@@ -177,6 +190,43 @@ class SwarmOrchestrator:
 
             for result in results.values():
                 state = self.state_manager.update_subtask(state, result)
+                # Write completed results into DataBuffer for downstream agents
+                if result.state == SubtaskState.COMPLETED and result.output:
+                    data_buffer.ingest_subtask_output(
+                        subtask_id=result.subtask_id,
+                        output=result.output,
+                    )
+
+            # ── Self-healing: detect group-level failure and trigger redecomposition ──
+            group_failed_count = sum(1 for r in results.values() if r.state == SubtaskState.FAILED)
+            if group_failed_count > 0:
+                consecutive_group_failures += 1
+            else:
+                consecutive_group_failures = 0
+
+            if consecutive_group_failures >= MAX_GROUP_FAILURES_BEFORE_REDECOMPOSE and state.current_group + 1 < len(dag.parallel_groups):
+                logger.warning(
+                    f"  {consecutive_group_failures} consecutive groups had failures — "
+                    f"triggering full DAG redecomposition"
+                )
+                self._emit("tool_call", agent_name="orchestrator", tool="redecompose",
+                          args={"reason": f"{consecutive_group_failures} consecutive group failures"})
+                new_dag = await self._redecompose_dag(
+                    dag=dag,
+                    failed_results={sid: r for sid, r in results.items() if r.state == SubtaskState.FAILED},
+                    data_buffer=data_buffer,
+                )
+                if new_dag:
+                    logger.info(f"  Redecomposed DAG: {len(new_dag.subtasks)} subtasks, {len(new_dag.parallel_groups)} groups")
+                    # Replace remaining groups with redecomposed plan
+                    dag.subtasks = [s for s in dag.subtasks if s.id in results and results[s.id].state != SubtaskState.FAILED] + [
+                        s for s in new_dag.subtasks
+                    ]
+                    # Rebuild parallel_groups: keep completed groups, replace remaining with new
+                    completed_groups = dag.parallel_groups[:state.current_group + 1]
+                    new_groups = new_dag.parallel_groups
+                    dag.parallel_groups = completed_groups + new_groups
+                    consecutive_group_failures = 0
 
             self.state_manager.checkpoint(state)
             state = self.state_manager.advance_group(state)
@@ -232,6 +282,58 @@ class SwarmOrchestrator:
                 depends_on=subtask.depends_on,
             )
         except Exception:
+            return None
+
+    async def _redecompose_dag(
+        self,
+        dag: TaskDAG,
+        failed_results: dict[str, SubtaskResult],
+        data_buffer: DataBuffer,
+    ) -> TaskDAG | None:
+        """Re-decompose the remaining work when multiple groups consecutively fail.
+
+        Sends the original query + failure context back to the decomposer
+        to generate a fresh DAG for the unfinished portions of the task.
+        """
+        try:
+            failure_context = "\n".join(
+                f"  [{sid}] {r.error or 'no output'} (retries: {r.retry_count})"
+                for sid, r in failed_results.items()
+            )
+            redecompose_prompt = (
+                f"## Original Task\n{dag.original_query}\n\n"
+                f"## Completed So Far\n"
+                + ("\n".join(f"- {k}: {v[:200]}" for k, v in data_buffer.snapshot()["keys"].items()))
+                + f"\n\n## Failed Subtasks (need new approach)\n{failure_context}\n\n"
+                "Re-decompose the REMAINING work into a new set of subtasks. "
+                "Learn from the failures: use different agent strategies, different tools, "
+                "or break the work into smaller pieces. "
+                "Output the standard decomposition JSON with 'subtasks' and 'parallel_groups'."
+            )
+            msg = await self._call_llm(
+                self.factory.default_model,
+                [
+                    {"role": "system", "content": "You are a task decomposition expert. Redesign the failed subtasks with new approaches."},
+                    {"role": "user", "content": redecompose_prompt},
+                ],
+                temperature=0.5,
+            )
+            raw = (msg.content or "").strip()
+            parsed = MetaScheduler._parse_json_output(raw)
+
+            import uuid as _uuid
+            new_task_id = f"redecompose_{dag.task_id}_{_uuid.uuid4().hex[:6]}"
+            new_dag = TaskDAG(
+                task_id=new_task_id,
+                original_query=f"[Redecomposed from {dag.task_id}] {dag.original_query}",
+                intent=dag.intent,
+                subtasks=[Subtask.model_validate(s) for s in parsed["subtasks"]],
+                parallel_groups=parsed["parallel_groups"],
+            )
+            logger.info(f"Redecomposed → {len(new_dag.subtasks)} subtasks, {len(new_dag.parallel_groups)} groups")
+            return new_dag
+        except Exception as e:
+            logger.warning(f"Redecomposition failed: {e}")
             return None
 
     async def _run_single_agent(
