@@ -105,7 +105,6 @@ class SwarmOrchestrator:
     async def _execute_from_state(self, state: SwarmState) -> SwarmState:
         dag = state.dag
         data_buffer = DataBuffer()
-        total_subtasks = len(dag.subtasks)
         consecutive_group_failures = 0
         MAX_GROUP_FAILURES_BEFORE_REDECOMPOSE = 2
 
@@ -303,7 +302,7 @@ class SwarmOrchestrator:
             redecompose_prompt = (
                 f"## Original Task\n{dag.original_query}\n\n"
                 f"## Completed So Far\n"
-                + ("\n".join(f"- {k}: {v[:200]}" for k, v in data_buffer.snapshot()["keys"].items()))
+                + ("\n".join(f"- {k}: {v.get('source', '')[:200]}" for k, v in data_buffer.snapshot()["keys"].items()))
                 + f"\n\n## Failed Subtasks (need new approach)\n{failure_context}\n\n"
                 "Re-decompose the REMAINING work into a new set of subtasks. "
                 "Learn from the failures: use different agent strategies, different tools, "
@@ -407,7 +406,8 @@ class SwarmOrchestrator:
                             tool_calls_approved.append(tc)
 
                     if tool_calls_to_approve:
-                        # Build approval request from the first risky tool call
+                        # Emit approval for the first risky tool call; only execute that ONE
+                        # after approval, not all risky calls — user only approved one action
                         tc = tool_calls_to_approve[0]
                         try:
                             tc_args = json.loads(tc.function.arguments)
@@ -428,15 +428,15 @@ class SwarmOrchestrator:
                                 "content": f"[User Decision] Action REJECTED: {feedback}. Adjust your approach.",
                             })
                             continue  # go to next iteration with feedback
-                        # Approved: add approval note
+                        # Approved: add approval note, then execute only the approved call
                         fb = decision.get("feedback", "")
                         if fb:
                             messages.append({
                                 "role": "system",
                                 "content": f"[User Decision] Approved with note: {fb}. Proceed.",
                             })
-                        # Merge approved tool calls back with the rest
-                        msg.tool_calls = tool_calls_approved + tool_calls_to_approve
+                        # Merge: approved calls back with previously safe calls
+                        msg.tool_calls = tool_calls_approved + [tc]
 
                 if msg.tool_calls:
                     messages = await self._handle_tool_calls(agent, msg.tool_calls, messages)

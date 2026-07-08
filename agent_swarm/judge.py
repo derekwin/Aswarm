@@ -238,11 +238,12 @@ def judge_output_heuristic(
         concerns.append(stall_msg)
 
     # Determine verdict
-    if retry_msg or (doom_msg and stall_msg):
+    if retry_msg or doom_msg or stall_msg:
+        verdict = JudgeVerdict.REJECT if (retry_msg or (doom_msg and stall_msg)) else JudgeVerdict.RETRY
         return JudgeEvaluation(
-            verdict=JudgeVerdict.REJECT,
-            score=0.1,
-            feedback="; ".join(concerns + [retry_msg, doom_msg, stall_msg]) if (retry_msg or doom_msg) else "; ".join(concerns),
+            verdict=verdict,
+            score=0.1 if verdict == JudgeVerdict.REJECT else 0.4,
+            feedback="; ".join(filter(None, [doom_msg, stall_msg, retry_msg])),
             concerns=concerns + ([retry_msg] if retry_msg else []) + ([doom_msg] if doom_msg else []) + ([stall_msg] if stall_msg else []),
         )
 

@@ -195,7 +195,7 @@ export function useTaskRunner() {
 
     es.onerror = () => {
       es.close();
-      const isRunning = execStateRef.current === 'streaming' || execStateRef.current === 'reconnecting';
+      const isRunning = execStateRef.current === 'streaming' || execStateRef.current === 'reconnecting' || execStateRef.current === 'waiting_approval';
       if (isRunning) {
         // Exponential backoff reconnection with lastEventId for gap recovery
         reconnectAttemptRef.current += 1;

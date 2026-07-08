@@ -485,10 +485,60 @@ async def _execute_resume(new_task_id: str, original_task_id: str, checkpoint_pa
         state = await asyncio.to_thread(state_manager.resume, original_task_id, checkpoint_path)
         dag = state.dag
 
+        async def resume_on_event(event_type: str, data: dict):
+            match event_type:
+                case "agent_start":
+                    _push_event(new_task_id, {
+                        "type": "agent_start", "subtask_id": data["subtask_id"],
+                        "agent_name": data["agent_name"], "role": data.get("role", ""),
+                    })
+                case "agent_done":
+                    await storage.add_agent_result(
+                        new_task_id, data["subtask_id"], data.get("agent_name", ""),
+                        data["state"], data.get("output"), data.get("error"), data.get("retry_count", 0),
+                    )
+                    _push_event(new_task_id, {
+                        "type": "agent_done", "subtask_id": data["subtask_id"],
+                        "state": data["state"], "output": data.get("output", ""),
+                        "error": data.get("error"), "retry_count": data.get("retry_count", 0),
+                    })
+                case "tool_call":
+                    arg_preview = json.dumps(data.get("args", {}), ensure_ascii=False)[:200]
+                    _push_event(new_task_id, {
+                        "type": "tool_call", "agent_name": data["agent_name"],
+                        "tool": data["tool"], "args": arg_preview,
+                    })
+                case "approval_request":
+                    _push_event(new_task_id, {
+                        "type": "approval_request",
+                        "subtask_id": data["subtask_id"],
+                        "agent_name": data["agent_name"],
+                        "action": data.get("action", ""),
+                        "reasoning": data.get("reasoning", ""),
+                        "risk_level": data.get("risk_level", "medium"),
+                    })
+
+        async def resume_wait_for_approval() -> dict | None:
+            evt = asyncio.Event()
+            _approval_events[new_task_id] = evt
+            try:
+                while not evt.is_set():
+                    if _cancel_flags.get(new_task_id):
+                        return None
+                    try:
+                        await asyncio.wait_for(evt.wait(), timeout=300)
+                    except asyncio.TimeoutError:
+                        return {"approved": False, "feedback": "Approval timed out", "subtask_id": ""}
+            finally:
+                _approval_events.pop(new_task_id, None)
+            return _approval_decisions.pop(new_task_id, None)
+
         orchestrator = SwarmOrchestrator(
             tools=tools, llm=llm, factory=factory, state_manager=state_manager,
             max_subtask_retries=2,
+            on_event=resume_on_event,
             is_cancelled=lambda: _cancel_flags.get(new_task_id, False),
+            wait_for_approval=resume_wait_for_approval,
         )
 
         subtask_info = [
@@ -507,7 +557,9 @@ async def _execute_resume(new_task_id: str, original_task_id: str, checkpoint_pa
         results = [{"id": r.subtask_id, "state": r.state.value, "output": r.output, "error": r.error}
                    for r in state.subtask_results.values()]
         summary = orchestrator.aggregator.aggregate(list(state.subtask_results.values()))
-        await storage.add_message(task["conversation_id"], "assistant", summary) if False else None
+        task = await storage.get_task(original_task_id)
+        if task:
+            await storage.add_message(task["conversation_id"], "assistant", summary)
         _push_event(new_task_id, {"type": "done", "summary": summary, "results": results})
 
     except Exception as e:

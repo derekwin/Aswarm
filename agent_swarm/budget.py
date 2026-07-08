@@ -126,10 +126,10 @@ class BudgetTracker:
         # Try exact match first
         for i, m in enumerate(DEGRADATION_CHAIN):
             if m.lower() == current_lower:
-                # Degrade one step down (or more if needed)
+                # Degrade based on configured degrade_pct and proximity to block
                 if self.usage_pct() > 0.95:
                     return DEGRADATION_CHAIN[max(0, i - 3)]  # aggressive degrade
-                elif self.usage_pct() > 0.85:
+                elif self.usage_pct() > self.degrade_pct:
                     return DEGRADATION_CHAIN[max(0, i - 1)]
                 return current_model
         # Model not in known chain — use cheapest available
