@@ -21,6 +21,7 @@ export type TaskExecState =
   | 'decomposing'
   | 'streaming'
   | 'reconnecting'
+  | 'waiting_approval'
   | 'completed'
   | 'failed'
   | 'cancelled';
@@ -94,6 +95,7 @@ export type SSEEvent =
   | { type: 'tool_call'; agent_name: string; tool: string; args: string }
   | { type: 'done'; summary?: string; results?: unknown[] }
   | { type: 'progress'; completed: number; total: number }
+  | { type: 'approval_request'; subtask_id: string; agent_name: string; action: string; reasoning: string; risk_level: string }
   | { type: 'error'; msg: string; code?: string };
 
 // ── Settings ──

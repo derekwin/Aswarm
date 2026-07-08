@@ -10,8 +10,15 @@ from agent_swarm.agent_factory import Agent, AgentFactory
 from agent_swarm.context import get_context
 from agent_swarm.infrastructure.llm_client import LLMClient
 from agent_swarm.infrastructure.tool_registry import ToolRegistry
+from agent_swarm.judge import (
+    JudgeEvaluation,
+    JudgeVerdict,
+    StallDetector,
+    judge_output,
+    judge_output_heuristic,
+)
 from agent_swarm.meta_scheduler import MetaScheduler
-from agent_swarm.models import AgentConfig, Subtask, SubtaskResult, SubtaskState, SwarmState, TaskDAG
+from agent_swarm.models import AgentConfig, ApprovalRequest, Subtask, SubtaskResult, SubtaskState, SwarmState, TaskDAG
 from agent_swarm.state_manager import StateManager
 
 logger = logging.getLogger(__name__)
@@ -36,6 +43,9 @@ class ResultAggregator:
 
 class SwarmOrchestrator:
     MAX_SEARCH_ROUNDS = 4
+    ENABLE_LLM_JUDGE = True       # set False to use heuristic-only judge
+    JUDGE_MODEL = "qwen3:3b"      # small model for quality evaluation
+    MAX_QUALITY_RETRIES = 2       # retries triggered by Judge within a single run
 
     def __init__(
         self,
@@ -46,6 +56,7 @@ class SwarmOrchestrator:
         max_subtask_retries: int = 2,
         on_event: Callable[[str, dict[str, Any]], None] | None = None,
         is_cancelled: Callable[[], bool] | None = None,
+        wait_for_approval: Callable[[], Any] | None = None,
     ):
         self.tools = tools
         self.factory = factory
@@ -55,6 +66,7 @@ class SwarmOrchestrator:
         self.aggregator = ResultAggregator()
         self.on_event = on_event
         self.is_cancelled = is_cancelled or (lambda: False)
+        self.wait_for_approval = wait_for_approval
 
     def _check_cancelled(self) -> bool:
         return self.is_cancelled()
@@ -231,10 +243,13 @@ class SwarmOrchestrator:
         tools = self._build_tools_schema(agent)
         has_search_tool = "search_engine" in agent.tool_names()
 
+        stall_detector = StallDetector()
         iteration = 0
         final_output = ""
         search_count = 0
         active_tools = tools
+        quality_retries = 0
+        judge_feedback = ""
 
         while iteration < agent.max_iterations:
             if self._check_cancelled():
@@ -247,6 +262,12 @@ class SwarmOrchestrator:
 
             iteration += 1
 
+            # ── Doom-loop check ──
+            doom_msg = stall_detector.check_doom_loop()
+            if doom_msg:
+                logger.warning(f"  [{agent.name}] {doom_msg}")
+                self._emit("tool_call", agent_name=agent.name, tool="judge:doom_loop", args={"message": doom_msg})
+
             if has_search_tool and search_count >= self.MAX_SEARCH_ROUNDS:
                 messages.append({
                     "role": "system",
@@ -258,6 +279,14 @@ class SwarmOrchestrator:
                 active_tools = []
                 has_search_tool = False
 
+            # ── Inject judge feedback from previous quality retry ──
+            if judge_feedback:
+                messages.append({
+                    "role": "system",
+                    "content": f"[Quality Feedback] {judge_feedback}\n\nPlease improve your output and try again.",
+                })
+                judge_feedback = ""  # only apply once per retry
+
             try:
                 msg = await self._call_llm(
                     model=agent.model,
@@ -265,14 +294,97 @@ class SwarmOrchestrator:
                     tools=active_tools,
                 )
 
+                # ── HITL: check for tool calls needing approval ──
+                if msg.tool_calls and self.wait_for_approval:
+                    tool_calls_to_approve = []
+                    tool_calls_approved = []
+                    for tc in msg.tool_calls:
+                        if tc.function.name in ("browser", "file_writer", "shell"):
+                            tool_calls_to_approve.append(tc)
+                        else:
+                            tool_calls_approved.append(tc)
+
+                    if tool_calls_to_approve:
+                        # Build approval request from the first risky tool call
+                        tc = tool_calls_to_approve[0]
+                        try:
+                            tc_args = json.loads(tc.function.arguments)
+                        except Exception:
+                            tc_args = {}
+                        self._emit("approval_request",
+                                  subtask_id=subtask_id,
+                                  agent_name=agent.name,
+                                  action=f"{tc.function.name}({json.dumps(tc_args, ensure_ascii=False)[:200]})",
+                                  reasoning=f"Agent '{agent.name}' wants to execute {tc.function.name}",
+                                  risk_level="high" if tc.function.name == "shell" else "medium")
+                        logger.info(f"  [{agent.name}] Awaiting user approval for {tc.function.name}")
+                        decision = await self.wait_for_approval()
+                        if not decision or not decision.get("approved"):
+                            feedback = (decision or {}).get("feedback", "User rejected the action")
+                            messages.append({
+                                "role": "system",
+                                "content": f"[User Decision] Action REJECTED: {feedback}. Adjust your approach.",
+                            })
+                            continue  # go to next iteration with feedback
+                        # Approved: add approval note
+                        fb = decision.get("feedback", "")
+                        if fb:
+                            messages.append({
+                                "role": "system",
+                                "content": f"[User Decision] Approved with note: {fb}. Proceed.",
+                            })
+                        # Merge approved tool calls back with the rest
+                        msg.tool_calls = tool_calls_approved + tool_calls_to_approve
+
                 if msg.tool_calls:
                     messages = await self._handle_tool_calls(agent, msg.tool_calls, messages)
                     search_count += sum(
                         1 for tc in (msg.tool_calls or [])
                         if tc.function.name == "search_engine"
                     )
+                    # Record actions for doom-loop detection
+                    for tc in (msg.tool_calls or []):
+                        stall_detector.record_action(tc.function.name)
                 else:
                     final_output = msg.content or ""
+                    stall_detector.record_output(final_output)
+
+                    # ── Judge quality evaluation ──
+                    evaluation = await self._evaluate_quality(
+                        task_prompt=prompt,
+                        output=final_output,
+                        agent_role=agent.role,
+                        retry_count=quality_retries,
+                        stall_detector=stall_detector,
+                    )
+
+                    if evaluation.verdict == JudgeVerdict.REJECT:
+                        logger.warning(f"  [{agent.name}] Judge REJECT (score={evaluation.score:.2f}): {evaluation.feedback[:100]}")
+                        result = SubtaskResult(
+                            subtask_id=subtask_id,
+                            state=SubtaskState.FAILED,
+                            output=final_output,
+                            error=f"Judge rejected (score={evaluation.score:.2f}): {evaluation.feedback[:300]}",
+                            iterations_used=iteration,
+                        )
+                        self._emit("agent_done", subtask_id=subtask_id, state=result.state.value,
+                                  output=result.output, error=result.error, retry_count=result.retry_count)
+                        return result
+
+                    if evaluation.verdict == JudgeVerdict.RETRY and quality_retries < self.MAX_QUALITY_RETRIES:
+                        quality_retries += 1
+                        judge_feedback = evaluation.feedback
+                        logger.info(
+                            f"  [{agent.name}] Judge RETRY #{quality_retries} "
+                            f"(score={evaluation.score:.2f}): {evaluation.feedback[:100]}"
+                        )
+                        self._emit("tool_call", agent_name=agent.name,
+                                  tool="judge:retry",
+                                  args={"score": evaluation.score, "feedback": evaluation.feedback[:200]})
+                        # Continue while loop — will re-prompt with judge_feedback
+                        continue
+
+                    # ACCEPT or retries exhausted
                     messages.append({"role": "assistant", "content": final_output})
                     break
 
@@ -308,6 +420,60 @@ class SwarmOrchestrator:
         self._emit("agent_done", subtask_id=subtask_id, state=result.state.value,
                   output=result.output, error=result.error, retry_count=result.retry_count)
         return result
+
+    async def _evaluate_quality(
+        self,
+        task_prompt: str,
+        output: str,
+        agent_role: str,
+        retry_count: int,
+        stall_detector: StallDetector | None,
+    ) -> JudgeEvaluation:
+        """Run judge evaluation: heuristic first, then LLM if enabled."""
+        # Always run heuristic first (fast, free)
+        heuristic = judge_output_heuristic(
+            output=output,
+            task_prompt=task_prompt,
+            retry_count=retry_count,
+            stall_detector=stall_detector,
+        )
+        # If heuristic finds doom loop or retry limit, skip LLM — it's definitive
+        if heuristic.verdict == JudgeVerdict.REJECT:
+            return heuristic
+
+        # If LLM judge is disabled, use heuristic result
+        if not self.ENABLE_LLM_JUDGE:
+            return heuristic
+
+        # LLM judge for deeper evaluation
+        try:
+            llm_eval = await judge_output(
+                llm_call=self._call_llm,
+                task_prompt=task_prompt,
+                output=output,
+                agent_role=agent_role,
+                judge_model=self.JUDGE_MODEL,
+            )
+            # Merge: take the stricter verdict
+            if llm_eval.verdict == JudgeVerdict.REJECT or heuristic.verdict == JudgeVerdict.REJECT:
+                verdict = JudgeVerdict.REJECT
+                score = min(llm_eval.score, heuristic.score)
+                feedback = " | ".join(filter(None, [llm_eval.feedback, heuristic.feedback]))
+                concerns = llm_eval.concerns + heuristic.concerns
+            elif llm_eval.verdict == JudgeVerdict.RETRY or heuristic.verdict == JudgeVerdict.RETRY:
+                verdict = JudgeVerdict.RETRY
+                score = min(llm_eval.score, heuristic.score)
+                feedback = " | ".join(filter(None, [llm_eval.feedback, heuristic.feedback]))
+                concerns = llm_eval.concerns + heuristic.concerns
+            else:
+                verdict = JudgeVerdict.ACCEPT
+                score = max(llm_eval.score, heuristic.score)
+                feedback = ""
+                concerns = []
+            return JudgeEvaluation(verdict=verdict, score=score, feedback=feedback, concerns=concerns)
+        except Exception as e:
+            logger.warning(f"LLM judge failed, falling back to heuristic: {e}")
+            return heuristic
 
     async def _handle_tool_calls(self, agent: Agent, tool_calls, messages: list) -> list:
         # Collect all tool_calls into one assistant message (OpenAI API expects this)

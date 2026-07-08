@@ -77,6 +77,8 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 _streams: dict[str, asyncio.Queue] = {}
 _dag_snapshots: dict[str, dict] = {}
 _cancel_flags: dict[str, bool] = {}
+_approval_events: dict[str, asyncio.Event] = {}  # task_id -> event, set when user approves/rejects
+_approval_decisions: dict[str, dict] = {}  # task_id -> {"approved": bool, "feedback": str}
 _event_ids: dict[str, int] = {}
 _event_archive: dict[str, list[dict]] = {}  # circular buffer, last 100 events per task for replay
 _MAX_ARCHIVE = 100
@@ -366,9 +368,26 @@ async def _event_stream_empty():
 @app.post("/cancel/{task_id}")
 async def cancel_task(task_id: str):
     _cancel_flags[task_id] = True
+    # Wake up any waiting approval
+    evt = _approval_events.get(task_id)
+    if evt:
+        evt.set()
     await storage.update_task(task_id, "cancelled")
     _push_event(task_id, {"type": "done", "summary": "Task cancelled by user", "results": []})
     return {"ok": True}
+
+
+# ── HITL Approval API ──
+
+@app.post("/api/approve/{task_id}/{subtask_id}")
+async def approve_action(task_id: str, subtask_id: str, approved: bool = Query(default=True), feedback: str = Query(default="")):
+    """Approve or reject an agent's pending approval request."""
+    decision = {"approved": approved, "feedback": feedback, "subtask_id": subtask_id}
+    _approval_decisions[task_id] = decision
+    evt = _approval_events.get(task_id)
+    if evt:
+        evt.set()
+    return {"ok": True, "approved": approved}
 
 
 # ── Trace API ──
@@ -527,12 +546,39 @@ async def _execute_task(task_id: str, conv_id: str, query: str, lang: str = "en"
                         "type": "tool_call", "agent_name": data["agent_name"],
                         "tool": data["tool"], "args": arg_preview,
                     })
+                case "approval_request":
+                    # HITL: agent needs user approval
+                    _push_event(task_id, {
+                        "type": "approval_request",
+                        "subtask_id": data["subtask_id"],
+                        "agent_name": data["agent_name"],
+                        "action": data.get("action", ""),
+                        "reasoning": data.get("reasoning", ""),
+                        "risk_level": data.get("risk_level", "medium"),
+                    })
+
+        async def wait_for_approval() -> dict | None:
+            """Block until user approves/rejects, or task cancelled. Returns decision dict or None."""
+            evt = asyncio.Event()
+            _approval_events[task_id] = evt
+            try:
+                while not evt.is_set():
+                    if _cancel_flags.get(task_id):
+                        return None
+                    try:
+                        await asyncio.wait_for(evt.wait(), timeout=300)  # 5 min timeout
+                    except asyncio.TimeoutError:
+                        return {"approved": False, "feedback": "Approval timed out", "subtask_id": ""}
+            finally:
+                _approval_events.pop(task_id, None)
+            return _approval_decisions.pop(task_id, None)
 
         orchestrator = SwarmOrchestrator(
             tools=tools, llm=llm, factory=factory, state_manager=state_manager,
             max_subtask_retries=2,
             on_event=on_orchestrator_event,
             is_cancelled=lambda: _cancel_flags.get(task_id, False),
+            wait_for_approval=wait_for_approval,
         )
 
         _push_event(task_id, {"type": "status", "msg": "Decomposing task..."})

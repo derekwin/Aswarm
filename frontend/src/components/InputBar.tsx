@@ -8,9 +8,10 @@ import { api } from '@/api';
 interface Props {
   onSend: (convId: string, query: string) => void;
   onStop: () => void;
+  taskId?: string;
 }
 
-export default function InputBar({ onSend, onStop }: Props) {
+export default function InputBar({ onSend, onStop, taskId }: Props) {
   const { state: app, dispatch: appDispatch } = useApp();
   const { state: conv } = useConv();
   const { dispatch: uiDispatch } = useUI();
@@ -18,7 +19,9 @@ export default function InputBar({ onSend, onStop }: Props) {
 
   const [query, setQuery] = useState('');
   const [sending, setSending] = useState(false);
+  const [approvalFeedback, setApprovalFeedback] = useState('');
   const isExecuting = conv.execState === 'streaming' || conv.execState === 'decomposing' || conv.execState === 'reconnecting';
+  const awaitingApproval = conv.execState === 'waiting_approval';
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -78,8 +81,36 @@ export default function InputBar({ onSend, onStop }: Props) {
     setSending(false);
   };
 
+  const handleApprove = async (approved: boolean) => {
+    if (!taskId || !conv.taskId) return;
+    try {
+      await api.approveAction(taskId, '', approved, approvalFeedback);
+      setApprovalFeedback('');
+    } catch {
+      uiDispatch({ type: 'ADD_TOAST', payload: t('uploadFailed') });
+    }
+  };
+
   return (
     <div className="px-6 py-1 pb-3 shrink-0">
+      {awaitingApproval && (
+        <div className="flex gap-2 max-w-[820px] mx-auto mb-2 p-3 rounded-lg border border-warning/30 bg-warning-soft/10">
+          <div className="flex-1 text-xs text-text-secondary">
+            <span className="font-semibold text-warning">⚠ Agent needs your approval</span>
+            <input
+              type="text"
+              placeholder="Optional feedback for the agent..."
+              value={approvalFeedback}
+              onChange={e => setApprovalFeedback(e.target.value)}
+              className="input-base text-xs mt-1 w-full"
+            />
+          </div>
+          <div className="flex gap-1.5 items-end shrink-0">
+            <button className="btn-primary px-3 h-8 text-xs bg-success hover:brightness-110" onClick={() => handleApprove(true)}>✓ Approve</button>
+            <button className="btn-secondary px-3 h-8 text-xs text-danger" onClick={() => handleApprove(false)}>✗ Reject</button>
+          </div>
+        </div>
+      )}
       <div className="flex gap-2 max-w-[820px] mx-auto items-end">
         <label className="w-10 h-10 flex items-center justify-center rounded-lg cursor-pointer text-text-secondary text-sm hover:text-accent hover:bg-accent-soft transition-all shrink-0" title={t('uploadFile')}>
           <input type="file" accept=".pdf,.txt,.md,.py,.json,.csv" onChange={handleFile} className="hidden" />

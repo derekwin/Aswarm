@@ -8,6 +8,18 @@ class SubtaskState(str, Enum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+    AWAITING_APPROVAL = "awaiting_approval"
+
+
+class ApprovalRequest(BaseModel):
+    """Human-in-the-loop: agent asks for approval before a high-risk action."""
+    subtask_id: str
+    agent_name: str
+    action: str = Field(description="What the agent wants to do")
+    reasoning: str = Field(description="Why the agent thinks this is needed")
+    risk_level: str = Field(default="medium", description="low / medium / high")
+    options: list[str] = Field(default_factory=lambda: ["approve", "reject"])
+    created_at: float = Field(default_factory=lambda: __import__("time").time())
 
 
 class AgentConfig(BaseModel):
@@ -46,6 +58,7 @@ class SubtaskResult(BaseModel):
     iterations_used: int = 0
     retry_count: int = 0
     retry_history: list[str] = Field(default_factory=list)
+    approval_request: "ApprovalRequest | None" = None
 
 
 class SwarmState(BaseModel):

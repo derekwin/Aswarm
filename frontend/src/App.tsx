@@ -147,7 +147,7 @@ function AppInner() {
                 onEditRerun={(query) => { if (app.activeConvId) runTask(app.activeConvId, query); }}
               />
             </div>
-            {hasConvs && <InputBar onSend={runTask} onStop={cancelTask} />}
+            {hasConvs && <InputBar onSend={runTask} onStop={cancelTask} taskId={conv.taskId || undefined} />}
           </div>
         )}
       </main>

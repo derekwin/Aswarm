@@ -62,4 +62,11 @@ export const api = {
     const res = await fetch('/api/upload', { method: 'POST', body: fd });
     return res.json();
   },
+
+  // HITL Approval
+  approveAction: (taskId: string, subtaskId: string, approved: boolean, feedback?: string) =>
+    request<{ ok: boolean; approved: boolean }>(
+      `/api/approve/${taskId}/${subtaskId}?approved=${approved}${feedback ? `&feedback=${encodeURIComponent(feedback)}` : ''}`,
+      { method: 'POST' }
+    ),
 };
