@@ -98,18 +98,21 @@ function AppInner() {
       }
 
       if (taskData.agent_results) {
-        const completedSet = new Set(taskData.agent_results.filter((r: { state: string }) => r.state === 'completed' || r.state === 'failed').map((r: { subtask_id: string }) => r.subtask_id));
-        for (const r of taskData.agent_results) {
-          convDispatch({ type: 'UPDATE_AGENT', payload: { id: r.subtask_id, data: { name: r.agent_name, role: '', state: r.state as 'pending' | 'running' | 'completed' | 'failed', output: r.output, error: r.error, retryCount: r.retry_count, subtaskId: r.subtask_id } } });
-          if (completedSet.has(r.subtask_id)) convDispatch({ type: 'INCREMENT_COMPLETED', payload: { subtaskId: r.subtask_id } });
-        }
+        // Phase 1: Populate all agents from DAG data first (ensures name/role survive recovery)
         if (taskData.task.dag_data) {
           try {
             const dag = JSON.parse(taskData.task.dag_data);
             for (const s of (dag.subtasks || [])) {
-              if (!completedSet.has(s.id)) convDispatch({ type: 'UPDATE_AGENT', payload: { id: s.id, data: { name: s.name, role: s.role, state: 'pending', retryCount: 0 } } });
+              convDispatch({ type: 'UPDATE_AGENT', payload: { id: s.id, data: { name: s.name, role: s.role, state: 'pending', retryCount: 0, subtaskId: s.id } } });
             }
-    } catch (e) { console.error('Restore cache failed:', e); }
+          } catch { /* ignore */ }
+        }
+        // Phase 2: Overlay actual results on top (preserves name/role from DAG if not in result)
+        const completedSet = new Set(taskData.agent_results.filter((r: { state: string }) => r.state === 'completed' || r.state === 'failed').map((r: { subtask_id: string }) => r.subtask_id));
+        for (const r of taskData.agent_results) {
+          const existing = conv.agents[r.subtask_id];
+          convDispatch({ type: 'UPDATE_AGENT', payload: { id: r.subtask_id, data: { name: r.agent_name || existing?.name || '', role: existing?.role || '', state: r.state as 'pending' | 'running' | 'completed' | 'failed', output: r.output, error: r.error, retryCount: r.retry_count, subtaskId: r.subtask_id } } });
+          if (completedSet.has(r.subtask_id)) convDispatch({ type: 'INCREMENT_COMPLETED', payload: { subtaskId: r.subtask_id } });
         }
       }
 

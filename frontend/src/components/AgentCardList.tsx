@@ -1,6 +1,5 @@
 import type { AgentState } from '@/types';
 import { useUI } from '@/context/UIContext';
-import { useT } from '@/hooks/useT';
 
 interface Props {
   agents: Record<string, AgentState>;
@@ -10,7 +9,6 @@ interface Props {
 
 export default function AgentCardList({ agents, totalAgents, completedAgents }: Props) {
   const { dispatch: uiDispatch } = useUI();
-  const t = useT();
 
   const sorted = Object.entries(agents).sort(([, a], [, b]) => {
     const order: Record<string, number> = { running: 0, pending: 1, completed: 2, failed: 3 };
@@ -34,9 +32,6 @@ export default function AgentCardList({ agents, totalAgents, completedAgents }: 
           const stateCls = a.state === 'running' ? 'border-accent bg-accent-soft' : a.state === 'completed' ? 'border-success/30 bg-success-soft' : a.state === 'failed' ? 'border-danger/30 bg-danger-soft' : '';
           const dotCls = a.state === 'running' ? 'border-accent text-accent bg-accent-soft animate-pulse-dot' : a.state === 'completed' ? 'bg-success border-success text-white' : a.state === 'failed' ? 'bg-danger border-danger text-white' : 'border-border text-text-muted';
           const dotIcon = a.state === 'completed' ? '✓' : a.state === 'failed' ? '✗' : '·';
-          const role = a.role || a.name?.split(/[\s-]/)[0] || '';
-          const label = role ? `${role}` : a.name || 'Agent';
-          const stateText = t(a.state as never);
           return (
             <button
               key={id}
@@ -46,8 +41,10 @@ export default function AgentCardList({ agents, totalAgents, completedAgents }: 
               <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold border-[1.5px] shrink-0 ${dotCls}`}>
                 {dotIcon}
               </span>
-              <span className="text-text-secondary">{label}</span>
-              <span className="text-text-muted">{stateText}</span>
+              <span className="text-text-primary font-medium">{a.name}</span>
+              {a.role && (
+                <span className="text-text-muted text-[10px]">({a.role})</span>
+              )}
               {a.retryCount > 0 && (
                 <span className="text-[10px] text-warning">↻{a.retryCount}</span>
               )}

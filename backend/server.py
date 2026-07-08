@@ -502,8 +502,7 @@ async def _execute_task(task_id: str, conv_id: str, query: str, lang: str = "en"
                         "type": "agent_start", "subtask_id": data["subtask_id"],
                         "agent_name": data["agent_name"], "role": data.get("role", ""),
                     })
-                    verb = role_verb.get(data.get("role", ""), "working")
-                    _push_event(task_id, {"type": "status", "msg": f"{data['agent_name']} is {verb}..."})
+                    # Don't emit redundant status messages — agent card dots show execution progress
                 case "agent_done":
                     trace.record("agent_done", task_id, subtask_id=data["subtask_id"], agent_name=data.get("agent_name", ""),
                                  data={"state": data["state"], "iterations": 0, "retries": data.get("retry_count", 0)})

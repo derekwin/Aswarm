@@ -40,8 +40,8 @@ const MessageBubble = memo(function MessageBubble({ index, message, onEdit }: Pr
           )}
         </div>
         <div className={`flex gap-2 mt-0.5 px-1 opacity-0 group-hover:opacity-100 transition-opacity ${!isAssistant ? 'justify-end' : ''}`}>
-          {!isAssistant && <button onClick={() => onEdit(index, message.content)} className="text-[10px] text-text-muted hover:text-text-primary" title={t('edit')}>✎</button>}
-          {isAssistant && <button onClick={() => { navigator.clipboard.writeText(message.content).catch(() => {}); }} className="text-[10px] text-text-muted hover:text-text-primary" title="Copy">📋</button>}
+          {!isAssistant && <button onClick={() => onEdit(index, message.content)} className="text-[11px] text-text-muted hover:text-accent font-medium" title={t('edit')}>{t('edit')}</button>}
+          {isAssistant && <button onClick={() => { navigator.clipboard.writeText(message.content).catch(() => {}); }} className="text-[11px] text-text-muted hover:text-accent font-medium" title={t('copy')}>{t('copy')}</button>}
         </div>
       </div>
     </div>

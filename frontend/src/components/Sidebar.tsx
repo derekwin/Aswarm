@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useReducer } from 'react';
 import { useApp } from '@/context/AppContext';
 import { useUI } from '@/context/UIContext';
 import { useT } from '@/hooks/useT';
@@ -19,13 +19,20 @@ export default function Sidebar() {
   const t = useT();
   const [filter, setFilter] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Periodic tick to re-check localStorage for running status changes
+  const [tick, bumpTick] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    const id = setInterval(bumpTick, 3000);
+    return () => clearInterval(id);
+  }, []);
   const runningIds = useMemo(() => {
     const running = new Set<string>();
     for (const id of Object.keys(state.conversations)) {
       if (isConvRunning(id)) running.add(id);
     }
     return running;
-  }, [state.conversations]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.conversations, tick]);
   const open = uiState.sidebarOpen;
 
   const newConv = async () => {

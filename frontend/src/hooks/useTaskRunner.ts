@@ -40,12 +40,14 @@ export function useTaskRunner() {
   const handleSSEEvent = useCallback((d: SSEEvent, es: EventSource) => {
     switch (d.type) {
       case 'status':
-        convDispatch({ type: 'UPDATE_LAST_MSG', payload: { content: d.msg } });
+        // Agent cards already show progress — skip redundant status text in chat
         break;
       case 'exec_state':
         convDispatch({ type: 'SET_EXEC_STATE', payload: d.state });
         if (d.state === 'decomposing') {
           convDispatch({ type: 'UPDATE_LAST_MSG', payload: { content: 'Decomposing task...', typing: true } });
+        } else if (d.state === 'streaming') {
+          convDispatch({ type: 'UPDATE_LAST_MSG', payload: { content: 'Executing agents...', typing: false } });
         }
         break;
       case 'dag':
