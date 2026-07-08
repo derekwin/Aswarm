@@ -9,7 +9,8 @@ function isConvRunning(convId: string): boolean {
     const raw = localStorage.getItem(`conv:${convId}`);
     if (!raw) return false;
     const entry = JSON.parse(raw);
-    return entry.execState === 'streaming' || entry.execState === 'reconnecting' || entry.execState === 'decomposing';
+    // Only consider truly still-running states — completed/failed/cancelled are done
+    return entry.execState === 'streaming' || entry.execState === 'reconnecting' || entry.execState === 'decomposing' || entry.execState === 'connecting';
   } catch { return false; }
 }
 
@@ -104,7 +105,15 @@ export default function Sidebar() {
                   <div className="flex-1 min-w-0">
                     <div className="truncate flex items-center gap-1.5">
                       {runningIds.has(id) && <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0" />}
-                      {c.title}
+                      {(() => {
+                        // Try localStorage title override first (instant), then state
+                        let displayTitle = c.title;
+                        try {
+                          const cachedTitle = localStorage.getItem(`conv_title:${id}`);
+                          if (cachedTitle && c.title === 'New Task') displayTitle = cachedTitle;
+                        } catch { /* ignore */ }
+                        return displayTitle;
+                      })()}
                     </div>
                     <div className="text-[11px] text-text-muted">
                       {new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

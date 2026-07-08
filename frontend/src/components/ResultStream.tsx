@@ -59,7 +59,11 @@ export default function ResultStream({ onEditRerun, taskId }: Props) {
   const submitEdit = () => {
     const text = editText.trim();
     if (!text || text === conv.messages[editingIdx!]?.content) return cancelEdit();
+    // Fill input with the edited text so runTask treats it like a new submission
+    const el = document.getElementById('queryInput') as HTMLTextAreaElement | null;
+    if (el) { el.value = text; el.focus(); }
     setEditingIdx(null);
+    // Trigger a new task run with the edited text — runTask will append user + assistant messages
     onEditRerun(text);
   };
 

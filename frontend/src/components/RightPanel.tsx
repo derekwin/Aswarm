@@ -17,8 +17,8 @@ export default function RightPanel({ panelWidth, onPanelResize }: Props) {
         <motion.div
           initial={{ width: 0, opacity: 0 }}
           animate={{ width: window.innerWidth < 768 ? window.innerWidth : panelWidth, opacity: 1 }}
-          exit={{ width: 0, opacity: 0 }}
-          transition={{ duration: 0.2 }}
+          exit={{ width: 0, opacity: 0, transition: { duration: 0.1 } }}
+          transition={{ duration: 0.15 }}
           className="shrink-0 overflow-hidden glass-heavy border-l border-border-subtle max-md:fixed max-md:inset-0 max-md:z-[140] relative"
         >
           <div

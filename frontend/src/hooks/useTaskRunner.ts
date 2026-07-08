@@ -45,9 +45,9 @@ export function useTaskRunner() {
       case 'exec_state':
         convDispatch({ type: 'SET_EXEC_STATE', payload: d.state });
         if (d.state === 'decomposing') {
-          convDispatch({ type: 'UPDATE_LAST_MSG', payload: { content: 'Decomposing task...', typing: true } });
+          convDispatch({ type: 'UPDATE_LAST_MSG', payload: { content: t('decomposing'), typing: true } });
         } else if (d.state === 'streaming') {
-          convDispatch({ type: 'UPDATE_LAST_MSG', payload: { content: 'Executing agents...', typing: false } });
+          convDispatch({ type: 'UPDATE_LAST_MSG', payload: { content: t('executing'), typing: false } });
         }
         break;
       case 'dag':
@@ -244,6 +244,7 @@ export function useTaskRunner() {
   const { runMockTask } = useMockRunner((event) => handleSSEEvent(event as SSEEvent, eventSourceRef.current!));
 
   const runTask = useCallback(async (convId: string, query: string) => {
+    // Append user message and start fresh assistant context
     convDispatch({ type: 'APPEND_MSG', payload: { role: 'user', content: query } });
     convDispatch({ type: 'APPEND_MSG', payload: { role: 'assistant', content: t('decomposing'), typing: true } });
     convDispatch({ type: 'SET_EXEC_STATE', payload: 'connecting' });
@@ -265,6 +266,11 @@ export function useTaskRunner() {
       const { task_id } = await api.runTask(query, convId, ui.lang);
       convDispatch({ type: 'SET_TASK_ID', payload: task_id });
       uiDispatch({ type: 'SET_CONNECTED', payload: true });
+      // Update sidebar title immediately from query
+      try {
+        const title = query.slice(0, 40);
+        localStorage.setItem(`conv_title:${convId}`, title);
+      } catch { /* ignore */ }
       connectSSE(task_id);
     } catch {
       uiDispatch({ type: 'SET_CONNECTED', payload: false });
