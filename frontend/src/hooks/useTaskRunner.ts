@@ -53,8 +53,6 @@ export function useTaskRunner() {
       case 'dag':
         convDispatch({ type: 'SET_DAG', payload: { dag: { intent: d.intent, subtasks: d.subtasks, parallel_groups: d.parallel_groups }, totalAgents: d.subtasks.length } });
         convDispatch({ type: 'SET_EXEC_STATE', payload: 'streaming' });
-        // Use APPEND_MSG — this is a new status event, don't overwrite the last assistant message
-        // (critical during SSE reconnect replay after HITL approval)
         convDispatch({ type: 'APPEND_MSG', payload: { role: 'assistant', content: d.subtasks.length + ' agents ready · ' + (d.intent || 'executing...'), typing: false } });
         break;
       case 'agent_start':
