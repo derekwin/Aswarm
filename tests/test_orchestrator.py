@@ -1,25 +1,21 @@
 import tempfile
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import AsyncMock, patch
-from agent_swarm.orchestrator import SwarmOrchestrator, ResultAggregator
-from agent_swarm.models import (
-    TaskDAG, Subtask, AgentConfig, SwarmState, SubtaskState, SubtaskResult
-)
-from agent_swarm.mcp_gateway import MCPGateway
-from agent_swarm.agent_factory import AgentFactory
-from agent_swarm.state_manager import StateManager
+
+from agent_swarm.agent_factory import Agent, AgentFactory
 from agent_swarm.infrastructure.llm_client import LLMClient
 from agent_swarm.infrastructure.tool_registry import ToolRegistry
+from agent_swarm.mcp_gateway import MCPGateway
+from agent_swarm.models import AgentConfig, Subtask, SubtaskResult, SubtaskState, TaskDAG
+from agent_swarm.orchestrator import ResultAggregator, SwarmOrchestrator
+from agent_swarm.state_manager import StateManager
 
 
 @pytest.fixture
 def gateway():
     return MCPGateway()
 
-
-@pytest.fixture
-def gateway():
-    return MCPGateway()
 
 @pytest.fixture
 def tools():
@@ -61,10 +57,10 @@ class TestResultAggregator:
         aggregator = ResultAggregator()
         summary = aggregator.aggregate(results)
 
-        assert "t1" in summary
+        assert "2/2" in summary
         assert "result1" in summary
-        assert "t2" in summary
         assert "result2" in summary
+        assert "completed" in summary
 
     def test_aggregate_with_failure(self):
         results = [
@@ -74,14 +70,15 @@ class TestResultAggregator:
         aggregator = ResultAggregator()
         summary = aggregator.aggregate(results)
 
-        assert "FAILED" in summary
-        assert "something broke" in summary
+        assert "1/2" in summary
+        assert "failed" in summary
+        assert "ok" in summary
 
 
 class TestSwarmOrchestrator:
     @pytest.mark.asyncio
     async def test_execute_completes_all_subtasks(self, gateway, tools, llm, state_manager, sample_dag):
-        factory = AgentFactory(gateway=gateway)
+        factory = AgentFactory(available_tools=set(gateway.available_tools()))
         orchestrator = SwarmOrchestrator(
             tools=tools, factory=factory, state_manager=state_manager, llm=llm,
         )
@@ -104,7 +101,7 @@ class TestSwarmOrchestrator:
 
     @pytest.mark.asyncio
     async def test_resume_from_checkpoint(self, gateway, tools, llm, state_manager, sample_dag):
-        factory = AgentFactory(gateway=gateway)
+        factory = AgentFactory(available_tools=set(gateway.available_tools()))
         orchestrator = SwarmOrchestrator(
             tools=tools, factory=factory, state_manager=state_manager, llm=llm,
         )
@@ -133,3 +130,43 @@ class TestSwarmOrchestrator:
             assert resumed_state.current_group == 2
             assert resumed_state.subtask_results["t1"].state == SubtaskState.COMPLETED
             assert resumed_state.subtask_results["t3"].state == SubtaskState.COMPLETED
+
+    @pytest.mark.asyncio
+    async def test_cancelled_before_execution(self, gateway, tools, llm, state_manager, sample_dag):
+        """When is_cancelled returns True, orchestrator should stop and not execute."""
+        factory = AgentFactory(available_tools=set(gateway.available_tools()))
+        orchestrator = SwarmOrchestrator(
+            tools=tools, factory=factory, state_manager=state_manager, llm=llm,
+            is_cancelled=lambda: True,
+        )
+        state = await orchestrator.execute(sample_dag)
+        assert state.current_group == 0
+        assert len(state.subtask_results) == 0
+
+    @pytest.mark.asyncio
+    async def test_on_event_callback(self, gateway, tools, llm, state_manager, sample_dag):
+        events = []
+
+        def collect_events(event_type: str, data: dict):
+            events.append((event_type, data))
+
+        factory = AgentFactory(available_tools=set(gateway.available_tools()))
+        orchestrator = SwarmOrchestrator(
+            tools=tools, factory=factory, state_manager=state_manager, llm=llm,
+            on_event=collect_events,
+        )
+
+        anim = Agent(name="test", role="coder", system_prompt="p", tools=["shell"], model="m", max_iterations=3)
+
+        async def mock_run_agent(subtask_id, agent, prompt, context):
+            orchestrator._emit("agent_start", subtask_id=subtask_id, agent_name=agent.name, role=agent.role)
+            orchestrator._emit("agent_done", subtask_id=subtask_id, state="completed", output="ok", retry_count=0)
+            return SubtaskResult(subtask_id=subtask_id, state=SubtaskState.COMPLETED, output="ok")
+
+        with patch.object(orchestrator, "_run_single_agent", side_effect=mock_run_agent):
+            await orchestrator.execute(sample_dag)
+
+        start_events = [e for e in events if e[0] == "agent_start"]
+        done_events = [e for e in events if e[0] == "agent_done"]
+        assert len(start_events) == 3
+        assert len(done_events) == 3

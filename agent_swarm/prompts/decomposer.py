@@ -1,4 +1,7 @@
-"""Decomposer 的 Prompt 模板和 few-shot 示例。"""
+"""Decomposer prompt templates and few-shot example loading."""
+
+import json
+from pathlib import Path
 
 DECOMPOSER_SYSTEM_PROMPT = """You are a task decomposition and Agent design expert. Given a user requirement, you must:
 
@@ -8,7 +11,7 @@ DECOMPOSER_SYSTEM_PROMPT = """You are a task decomposition and Agent design expe
 
 Rules:
 - Each Agent's system_prompt must be concrete and executable, at least 80 characters
-- Tools can only be selected from: browser, python_executor, file_reader, file_writer, shell, search_engine, webfetch
+- Tools can only be selected from the available tools list provided in the user prompt
 - Subtasks within each parallel_group must have no mutual dependencies
 - Keep subtask count under 100
 - Search/web research agents should use max_iterations 8-10; code/data agents use 5-7; writer agents use 3-5
@@ -17,210 +20,24 @@ Rules:
 - Data analysis agents MUST have python_executor, with explicit mention of available sandbox libraries
 - Output strictly as JSON, no extra text"""
 
-FEW_SHOT_EXAMPLES = [
-    {
-        "query": "调研2025年国产AI芯片市场并生成分析报告",
-        "output": {
-            "intent": "research",
-            "subtasks": [
-                {
-                    "id": "t1",
-                    "agent_config": {
-                        "name": "chip_market_searcher",
-                        "role": "web_searcher",
-                        "system_prompt": (
-                            "You are a semiconductor industry analyst skilled at searching chip market data. "
-                            "Search strategy: 1) Use search_engine to search keywords and get URL list "
-                            "2) Use webfetch to read full content of valuable pages "
-                            "3) If results are unsatisfactory, try different keywords, at least 3 rounds. "
-                            "Search for: vendor names, market share, shipments, product lines, funding info. "
-                            "Prioritize Chinese sources. "
-                            "Return structured data: vendor name, key products, market positioning, competitive advantages."
-                        ),
-                        "tools": ["search_engine", "webfetch", "browser"],
-                        "max_iterations": 5
-                    },
-                    "prompt": "搜索2025年国产AI芯片厂商市场份额、出货量、主要产品线、融资情况",
-                    "depends_on": []
-                },
-                {
-                    "id": "t2",
-                    "agent_config": {
-                        "name": "policy_analyst",
-                        "role": "web_searcher",
-                        "system_prompt": (
-                            "You are a policy research analyst skilled at extracting key information from policy documents. "
-                            "Search strategy: search_engine first → webfetch key page full content. "
-                            "Search for national policies, subsidy programs, and industry plans related to domestic chips. "
-                            "Focus on: semiconductor-related policies from NDRC, MIIT, MOST. "
-                            "If search results are insufficient, retry with different keyword combinations."
-                        ),
-                        "tools": ["search_engine", "webfetch", "browser"],
-                        "max_iterations": 4
-                    },
-                    "prompt": "搜索2024-2025年国产芯片相关政策、补贴、产业规划",
-                    "depends_on": []
-                },
-                {
-                    "id": "t3",
-                    "agent_config": {
-                        "name": "data_analyst",
-                        "role": "data_analyst",
-                        "system_prompt": (
-                            "You are a data analyst skilled at extracting insights from structured data. "
-                            "Use python_executor to run analysis code. Sandbox libraries: pandas, numpy, matplotlib, json. "
-                            "MUST generate and execute actual code, do not infer or imagine data. "
-                            "Analyze vendor data from upstream agents, identify market trends, competitive landscape, growth points. "
-                            "Output: market size estimates, CR3/CR5 concentration, SWOT analysis per vendor. "
-                            "If data is insufficient, mark missing items in output. Do NOT fabricate data."
-                        ),
-                        "tools": ["python_executor"],
-                        "max_iterations": 5
-                    },
-                    "prompt": "分析t1和t2收集的数据，提炼市场趋势、竞争格局、关键发现",
-                    "depends_on": ["t1", "t2"]
-                },
-                {
-                    "id": "t4",
-                    "agent_config": {
-                        "name": "report_writer",
-                        "role": "writer",
-                        "system_prompt": (
-                            "You are a professional analyst report writer. "
-                            "Based on upstream agent analysis results, write a structured market analysis report. "
-                            "Report structure: summary, market overview, vendor analysis, policy environment, trend forecast, conclusion. "
-                            "Language should be professional but accessible, suitable for management reading."
-                        ),
-                        "tools": ["file_writer"],
-                        "max_iterations": 3
-                    },
-                    "prompt": "基于t3的分析结果，撰写一篇2000字的国产AI芯片市场分析报告，保存为 report.md",
-                    "depends_on": ["t3"]
-                }
-            ],
-            "parallel_groups": [["t1", "t2"], ["t3"], ["t4"]]
-        }
-    },
-    {
-        "query": "写一个Python爬虫，爬取豆瓣电影Top250并保存为CSV",
-        "output": {
-            "intent": "code",
-            "subtasks": [
-                {
-                    "id": "t1",
-                    "agent_config": {
-                        "name": "requirements_analyst",
-                        "role": "coder",
-                        "system_prompt": (
-                            "You are a Python web scraping expert. Analyze requirements and determine technical approach. "
-                            "Consider: anti-scraping strategies, data fields, storage format, error handling. "
-                            "Output: technical plan document."
-                        ),
-                        "tools": ["browser"],
-                        "max_iterations": 3
-                    },
-                    "prompt": "分析豆瓣电影Top250页面结构，确定爬取方案",
-                    "depends_on": []
-                },
-                {
-                    "id": "t2",
-                    "agent_config": {
-                        "name": "code_writer",
-                        "role": "coder",
-                        "system_prompt": (
-                            "You are a Python developer skilled at writing web scraping code. "
-                            "Use requests + BeautifulSoup + csv modules. "
-                            "Code requirements: User-Agent spoofing, delay control, exception handling, progress display. "
-                            "Output a complete runnable .py file."
-                        ),
-                        "tools": ["file_writer", "python_executor"],
-                        "max_iterations": 8
-                    },
-                    "prompt": "编写Python爬虫代码，爬取豆瓣电影Top250，字段包括: 排名、片名、评分、评价人数、简介，保存为 douban_top250.csv",
-                    "depends_on": ["t1"]
-                },
-                {
-                    "id": "t3",
-                    "agent_config": {
-                        "name": "code_reviewer",
-                        "role": "reviewer",
-                        "system_prompt": (
-                            "You are a code reviewer. Check the robustness and compliance of scraping code. "
-                            "Check: exception handling completeness, anti-scraping measures, code readability. "
-                            "If bugs are found, fix them directly."
-                        ),
-                        "tools": ["file_reader", "file_writer", "python_executor"],
-                        "max_iterations": 5
-                    },
-                    "prompt": "审查并测试t2编写的爬虫代码，修复发现的问题",
-                    "depends_on": ["t2"]
-                }
-            ],
-            "parallel_groups": [["t1"], ["t2"], ["t3"]]
-        }
-    },
-    {
-        "query": "对比分析 React 和 Vue 在2025年的生态和发展趋势",
-        "output": {
-            "intent": "research",
-            "subtasks": [
-                {
-                    "id": "t1",
-                    "agent_config": {
-                        "name": "react_researcher",
-                        "role": "web_searcher",
-                        "system_prompt": (
-                            "You are a frontend technology researcher focused on React ecosystem. "
-                            "Search strategy: search_engine → webfetch key pages. At least 3 search rounds. "
-                            "Search for React 2025: new version features, Next.js developments, state management trends, community activity. "
-                            "Monitor official blogs, GitHub stars trends, npm download counts."
-                        ),
-                        "tools": ["search_engine", "webfetch", "browser"],
-                        "max_iterations": 5
-                    },
-                    "prompt": "调研React在2025年的生态系统、版本更新、社区趋势",
-                    "depends_on": []
-                },
-                {
-                    "id": "t2",
-                    "agent_config": {
-                        "name": "vue_researcher",
-                        "role": "web_searcher",
-                        "system_prompt": (
-                            "You are a frontend technology researcher focused on Vue ecosystem. "
-                            "Search strategy: search_engine → webfetch key pages. At least 3 search rounds. "
-                            "Search for Vue 2025: Vue 3.x new features, Nuxt 4 developments, Vite ecosystem, community activity. "
-                            "Monitor official blogs, GitHub stars trends, npm download counts."
-                        ),
-                        "tools": ["search_engine", "webfetch", "browser"],
-                        "max_iterations": 5
-                    },
-                    "prompt": "调研Vue在2025年的生态系统、版本更新、社区趋势",
-                    "depends_on": []
-                },
-                {
-                    "id": "t3",
-                    "agent_config": {
-                        "name": "comparison_analyst",
-                        "role": "data_analyst",
-                        "system_prompt": (
-                            "You are a technology comparison analyst. Based on React and Vue research data, "
-                            "compare across 5 dimensions: learning curve, performance, ecosystem richness, job demand, future development. "
-                            "Use python_executor to run comparison analysis code. Sandbox: pandas, matplotlib, json. "
-                            "MUST generate actual code and data comparisons, do not fabricate conclusions. "
-                            "Output: comparison table + detailed analysis per dimension + recommendations."
-                        ),
-                        "tools": ["python_executor", "file_writer"],
-                        "max_iterations": 5
-                    },
-                    "prompt": "对比分析t1和t2的数据，从多个维度给出结论和建议",
-                    "depends_on": ["t1", "t2"]
-                }
-            ],
-            "parallel_groups": [["t1", "t2"], ["t3"]]
-        }
-    }
-]
+
+DECOMPOSER_SYSTEM_PROMPT_ZH = """你是一个任务分解和Agent设计专家。根据用户需求，你必须：
+
+1. 将复杂任务拆解为可独立执行的子任务，形成DAG依赖图
+2. 为每个子任务现场设计一个Agent：命名、定义角色、编写system_prompt、分配工具
+3. 规划并行执行顺序：没有相互依赖的子任务放在同一个parallel_group中
+
+规则：
+- 每个Agent的system_prompt必须具体可执行，至少80个字符
+- 工具只能从用户提示中提供的工具列表中选择
+- 每个parallel_group内的子任务不能有相互依赖
+- 子任务数量控制在100以内
+- 搜索/网页研究类Agent使用max_iterations 8-10；编程/数据分析类使用5-7；写作类使用3-5
+- Agent的system_prompt必须包含：遇到困难的应对策略（如搜索结果不佳时尝试不同关键词）
+- 搜索Agent必须拥有search_engine + webfetch工具，指令：先搜索→用webfetch读取关键页面→综合总结。搜索4轮后，无论数据是否完整，停止搜索，输出当前最佳结果
+- 数据分析Agent必须拥有python_executor，并明确提及可用的沙盒库
+- Agent名称使用中文命名，如"芯片市场搜索员"、"政策分析员"、"数据分析师"、"报告撰写员"
+- 严格输出JSON格式，不要额外文字"""
 
 
 DECOMPOSER_USER_TEMPLATE = """Available tools:
@@ -230,3 +47,13 @@ User requirement:
 {query}
 
 Output the task decomposition JSON:"""
+
+
+_EXAMPLES_DIR = Path(__file__).parent
+
+
+def load_few_shot_examples() -> list[dict]:
+    """Load few-shot examples from JSON data file."""
+    path = _EXAMPLES_DIR / "examples.json"
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)

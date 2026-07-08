@@ -1,13 +1,12 @@
-import pytest
 from agent_swarm.agent_factory import AgentFactory
-from agent_swarm.models import AgentConfig
 from agent_swarm.mcp_gateway import MCPGateway
+from agent_swarm.models import AgentConfig
 
 
 class TestAgentFactory:
     def test_create_agent_returns_config(self):
         gateway = MCPGateway()
-        factory = AgentFactory(gateway=gateway)
+        factory = AgentFactory(available_tools=set(gateway.available_tools()))
 
         config = AgentConfig(
             name="test_agent",
@@ -25,7 +24,7 @@ class TestAgentFactory:
 
     def test_create_agent_with_default_model(self):
         gateway = MCPGateway()
-        factory = AgentFactory(gateway=gateway, default_model="qwen3-8b")
+        factory = AgentFactory(available_tools=set(gateway.available_tools()), default_model="qwen3-8b")
 
         config = AgentConfig(
             name="default_agent",
@@ -40,7 +39,7 @@ class TestAgentFactory:
 
     def test_create_agent_strips_invalid_tools(self):
         gateway = MCPGateway()
-        factory = AgentFactory(gateway=gateway)
+        factory = AgentFactory(available_tools=set(gateway.available_tools()))
 
         config = AgentConfig(
             name="test_agent",
@@ -56,7 +55,7 @@ class TestAgentFactory:
 
     def test_create_multiple_agents_independent(self):
         gateway = MCPGateway()
-        factory = AgentFactory(gateway=gateway)
+        factory = AgentFactory(available_tools=set(gateway.available_tools()))
 
         config1 = AgentConfig(
             name="agent_1",

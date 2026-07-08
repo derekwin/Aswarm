@@ -1,5 +1,5 @@
+from agent_swarm.models import AgentConfig, DivergenceWarning, Subtask, SubtaskResult, SubtaskState, SwarmState, TaskDAG
 import pytest
-from agent_swarm.models import AgentConfig, Subtask, TaskDAG, SubtaskState, SubtaskResult, SwarmState
 
 
 class TestAgentConfig:
@@ -24,6 +24,21 @@ class TestAgentConfig:
         )
         assert config.model == "qwen3-14b"
         assert config.max_iterations == 10
+
+    def test_max_iterations_boundary(self):
+        """max_iterations=1 (minimum) should be accepted."""
+        config = AgentConfig(name="a", role="r", system_prompt="p", tools=["t"], max_iterations=1)
+        assert config.max_iterations == 1
+
+    def test_max_iterations_rejects_zero(self):
+        """max_iterations=0 should be rejected by validation."""
+        with pytest.raises(Exception):
+            AgentConfig(name="a", role="r", system_prompt="p", tools=["t"], max_iterations=0)
+
+    def test_max_iterations_rejects_over_100(self):
+        """max_iterations > 100 should be rejected."""
+        with pytest.raises(Exception):
+            AgentConfig(name="a", role="r", system_prompt="p", tools=["t"], max_iterations=101)
 
 
 class TestSubtask:
@@ -94,3 +109,32 @@ class TestSwarmState:
         result = SubtaskResult(subtask_id="t1", state=SubtaskState.COMPLETED, output="done")
         state.subtask_results["t1"] = result
         assert state.subtask_results["t1"].state == SubtaskState.COMPLETED
+
+    def test_completed_count(self):
+        dag = TaskDAG(task_id="s", original_query="q", intent="t", subtasks=[], parallel_groups=[])
+        state = SwarmState(task_id="s", dag=dag)
+        state.subtask_results["t1"] = SubtaskResult(subtask_id="t1", state=SubtaskState.COMPLETED)
+        state.subtask_results["t2"] = SubtaskResult(subtask_id="t2", state=SubtaskState.COMPLETED)
+        state.subtask_results["t3"] = SubtaskResult(subtask_id="t3", state=SubtaskState.FAILED)
+        assert state.completed_count == 2
+        assert state.failed_count == 1
+
+    def test_progress_counts_empty(self):
+        dag = TaskDAG(task_id="s", original_query="q", intent="t", subtasks=[], parallel_groups=[])
+        state = SwarmState(task_id="s", dag=dag)
+        assert state.completed_count == 0
+        assert state.failed_count == 0
+
+
+class TestDivergenceWarning:
+    def test_default_values(self):
+        w = DivergenceWarning()
+        assert w.diverged is False
+        assert w.current_project == ""
+        assert w.new_task_summary == ""
+        assert len(w.suggestion) > 0
+
+    def test_diverged_warning(self):
+        w = DivergenceWarning(diverged=True, current_project="Project A", new_task_summary="Task B")
+        assert w.diverged is True
+        assert "Project A" in w.current_project

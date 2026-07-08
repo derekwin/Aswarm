@@ -1,4 +1,5 @@
 from enum import Enum
+
 from pydantic import BaseModel, Field
 
 
@@ -11,12 +12,12 @@ class SubtaskState(str, Enum):
 
 class AgentConfig(BaseModel):
     """由 Decomposer 现场生成的 Agent 配置。"""
-    name: str = Field(description="Agent 的唯一名称，如 'gpu_market_searcher'")
-    role: str = Field(description="角色分类，如 'web_searcher', 'coder', 'writer'")
-    system_prompt: str = Field(description="完全由 LLM 生成的 Agent 角色定义")
-    tools: list[str] = Field(description="Agent 可用的工具列表")
-    model: str = Field(default="default", description="可选的模型覆盖")
-    max_iterations: int = Field(default=5, description="最大推理轮次")
+    name: str = Field(description="Unique agent name, e.g. 'gpu_market_searcher'")
+    role: str = Field(description="Agent role: 'web_searcher', 'coder', 'writer', etc.")
+    system_prompt: str = Field(description="Fully LLM-generated agent role definition")
+    tools: list[str] = Field(description="List of tools available to this agent")
+    model: str = Field(default="default", description="Optional model override (default uses system default)")
+    max_iterations: int = Field(default=5, ge=1, le=100, description="Maximum reasoning iterations")
 
 
 class Subtask(BaseModel):
@@ -54,9 +55,19 @@ class SwarmState(BaseModel):
     subtask_results: dict[str, SubtaskResult] = Field(default_factory=dict)
     checkpoint_path: str | None = None
 
+    @property
+    def completed_count(self) -> int:
+        """Number of subtasks that completed successfully."""
+        return sum(1 for r in self.subtask_results.values() if r.state == SubtaskState.COMPLETED)
+
+    @property
+    def failed_count(self) -> int:
+        """Number of subtasks that failed."""
+        return sum(1 for r in self.subtask_results.values() if r.state == SubtaskState.FAILED)
+
 
 class DivergenceWarning(BaseModel):
     diverged: bool = False
     current_project: str = ""
     new_task_summary: str = ""
-    suggestion: str = ""
+    suggestion: str = "Consider creating a separate project for this task."

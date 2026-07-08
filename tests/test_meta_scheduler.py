@@ -1,10 +1,11 @@
 import json
-import pytest
 from unittest.mock import AsyncMock, patch
-from agent_swarm.meta_scheduler import MetaScheduler, Router
-from agent_swarm.models import TaskDAG, AgentConfig, Subtask
-from agent_swarm.infrastructure.llm_client import LLMClient
 
+import pytest
+
+from agent_swarm.infrastructure.llm_client import LLMClient
+from agent_swarm.meta_scheduler import MetaScheduler, Router
+from agent_swarm.models import AgentConfig, Subtask, TaskDAG
 
 # ─── Test Data ───
 
@@ -172,3 +173,62 @@ class TestMetaScheduler:
             mock_llm.return_value = "invalid json response without proper structure"
             with pytest.raises(ValueError, match="parse"):
                 await scheduler.decompose("test", "research")
+
+    @pytest.mark.asyncio
+    async def test_classify_intent(self):
+        llm = LLMClient(base_url="http://localhost:11434/v1", api_key="ollama")
+        scheduler = MetaScheduler(llm=llm, decomposer_model="qwen3.5:35b")
+
+        with patch.object(scheduler.llm, "chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.return_value = type("msg", (), {"content": "research"})()
+            intent = await scheduler.classify_intent("Analyze AI chip market")
+            assert intent == "research"
+
+    @pytest.mark.asyncio
+    async def test_classify_intent_defaults_to_multi_on_unknown(self):
+        llm = LLMClient(base_url="http://localhost:11434/v1", api_key="ollama")
+        scheduler = MetaScheduler(llm=llm, decomposer_model="qwen3.5:35b")
+
+        with patch.object(scheduler.llm, "chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.return_value = type("msg", (), {"content": "unknown_type"})()
+            intent = await scheduler.classify_intent("do something")
+            assert intent == "multi"
+
+    @pytest.mark.asyncio
+    async def test_classify_intent_defaults_to_multi_on_error(self):
+        llm = LLMClient(base_url="http://localhost:11434/v1", api_key="ollama")
+        scheduler = MetaScheduler(llm=llm, decomposer_model="qwen3.5:35b")
+
+        with patch.object(scheduler.llm, "chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.side_effect = ConnectionError("unreachable")
+            intent = await scheduler.classify_intent("test")
+            assert intent == "multi"
+
+    def test_check_if_divergent_no_project(self):
+        llm = LLMClient(base_url="http://localhost:11434/v1", api_key="ollama")
+        scheduler = MetaScheduler(llm=llm)
+        assert scheduler.check_if_divergent("anything") is None
+
+    def test_check_if_divergent_same_topic(self):
+        llm = LLMClient(base_url="http://localhost:11434/v1", api_key="ollama")
+        scheduler = MetaScheduler(llm=llm)
+        scheduler.set_project("Research the AI chip market trends and growth projections")
+        w = scheduler.check_if_divergent("Analyze domestic chip vendor market share")
+        assert w is not None
+        assert w.diverged is False
+
+    def test_check_if_divergent_unrelated_topic(self):
+        llm = LLMClient(base_url="http://localhost:11434/v1", api_key="ollama")
+        scheduler = MetaScheduler(llm=llm)
+        scheduler.set_project("Research the AI chip market trends and growth projections for semiconductor industry")
+        w = scheduler.check_if_divergent("Write a Python web scraper for weather data")
+        assert w is not None
+        assert w.diverged is True
+
+    def test_set_project(self):
+        llm = LLMClient(base_url="http://localhost:11434/v1", api_key="ollama")
+        scheduler = MetaScheduler(llm=llm)
+        scheduler.set_project("My research project")
+        w = scheduler.check_if_divergent("research project update")
+        assert w is not None
+        assert w.diverged is False

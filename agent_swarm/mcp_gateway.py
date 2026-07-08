@@ -3,9 +3,9 @@
 import asyncio
 import logging
 import os
-from typing import Any, Callable
 from dataclasses import dataclass
-from urllib.parse import urlparse, parse_qs, urlunparse
+from typing import Any, Callable
+from urllib.parse import parse_qs, urlparse, urlunparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -29,10 +29,15 @@ class ToolDefinition:
     description: str
     parameters: dict[str, Any]
     handler: Callable[..., Any]
+    required_params: list[str] | None = None
+
+    def __post_init__(self):
+        if self.required_params is None:
+            self.required_params = list(self.parameters.keys())
 
 
 def _search_multi_engine(query: str, max_results: int) -> str:
-    engines = [
+    engines: list[tuple[str, Any]] = [
         ("Bing", _search_bing),
         ("Baidu", _search_baidu),
         ("Sogou", _search_sogou),
@@ -67,7 +72,7 @@ def _search_bing(query: str, max_results: int) -> tuple[list[tuple[str, str, str
     try:
         resp = SESSION.get(
             "https://cn.bing.com/search",
-            params={"q": query, "setlang": "zh-CN", "count": min(max_results, 15)},
+            params={"q": query, "setlang": "zh-CN", "count": str(min(max_results, 15))},  # type: ignore[arg-type]
             timeout=15,
         )
         resp.raise_for_status()
@@ -98,7 +103,7 @@ def _search_sogou(query: str, max_results: int) -> tuple[list[tuple[str, str, st
 
 
 def _parse_bing_soup(soup: BeautifulSoup, max_results: int) -> list[tuple[str, str, str]]:
-    results = []
+    results: list[tuple[str, str, str]] = []
     for li in soup.select("#b_results > li.b_algo, #b_results > li.b_ans, .b_algo"):
         if len(results) >= max_results:
             break
@@ -106,7 +111,7 @@ def _parse_bing_soup(soup: BeautifulSoup, max_results: int) -> list[tuple[str, s
         if not title_el:
             continue
         title = title_el.get_text(strip=True)
-        href = _clean_bing_url(title_el.get("href", ""))
+        href = _clean_bing_url(str(title_el.get("href", "")))
         if not href:
             continue
         snippet_el = li.select_one(".b_caption p, .b_lineclamp2, .b_lineclamp3")
@@ -128,7 +133,7 @@ def _clean_bing_url(raw: str) -> str:
 
 
 def _parse_sogou_soup(soup: BeautifulSoup, max_results: int) -> list[tuple[str, str, str]]:
-    results = []
+    results: list[tuple[str, str, str]] = []
     for card in soup.select("#main .vrwrap, #main .rb, .results .vrwrap, .results .rb"):
         if len(results) >= max_results:
             break
@@ -136,7 +141,7 @@ def _parse_sogou_soup(soup: BeautifulSoup, max_results: int) -> list[tuple[str, 
         if not title_el:
             continue
         title = title_el.get_text(strip=True)
-        href = title_el.get("href", "")
+        href = str(title_el.get("href", ""))
         if href.startswith("/"):
             href = f"https://www.sogou.com{href}"
         snippet_el = card.select_one(".str_info, .ft, .text-layout, .fz-mid, p")
@@ -149,7 +154,7 @@ def _search_baidu(query: str, max_results: int) -> tuple[list[tuple[str, str, st
     try:
         resp = SESSION.get(
             "https://www.baidu.com/s",
-            params={"wd": query, "rn": min(max_results, 15)},
+            params={"wd": query, "rn": str(min(max_results, 15))},  # type: ignore[arg-type]
             timeout=15,
         )
         resp.raise_for_status()
@@ -163,7 +168,7 @@ def _search_baidu(query: str, max_results: int) -> tuple[list[tuple[str, str, st
 
 
 def _parse_baidu_soup(soup: BeautifulSoup, max_results: int) -> list[tuple[str, str, str]]:
-    results = []
+    results: list[tuple[str, str, str]] = []
     for card in soup.select(".result, .c-container"):
         if len(results) >= max_results:
             break
@@ -171,7 +176,7 @@ def _parse_baidu_soup(soup: BeautifulSoup, max_results: int) -> list[tuple[str, 
         if not title_el:
             continue
         title = title_el.get_text(strip=True)
-        href = title_el.get("href", "")
+        href = str(title_el.get("href", ""))
         if not href.startswith("http"):
             continue
         snippet_el = card.select_one(".c-abstract, .content-right_8Zs40, .c-span-last p")
@@ -183,36 +188,31 @@ def _parse_baidu_soup(soup: BeautifulSoup, max_results: int) -> list[tuple[str, 
 def _try_sandbox_run(cmd: list[str], timeout: int = 60) -> tuple[str, str, bool]:
     import os as _os
     tmpdir = _os.environ.get("AGENTSWARM_WORKSPACE", SANDBOX_TMPDIR)
+    _os.makedirs(tmpdir, exist_ok=True)
+
     try:
         from sandlock import Sandbox
-        sandbox = Sandbox(
-            fs_writable=[tmpdir],
-            fs_readable=["/usr", "/lib", "/lib64", "/etc", "/bin", "/tmp"],
-            max_memory="512M",
-            max_processes=10,
-            clean_env=True,
-        )
-        result = sandbox.run(cmd, timeout=timeout)
-        return result.stdout.decode("utf-8", errors="replace"), result.stderr.decode("utf-8", errors="replace"), result.success
-    except ImportError:
-        logger.debug("Sandlock not installed, falling back to subprocess")
-        import subprocess
-        os.makedirs(tmpdir, exist_ok=True)
-        proc = subprocess.run(
-            cmd, capture_output=True, timeout=timeout, cwd=tmpdir,
-        )
-        return proc.stdout.decode("utf-8", errors="replace"), proc.stderr.decode("utf-8", errors="replace"), proc.returncode == 0
-    except ModuleNotFoundError:
-        logger.warning("Sandlock import failed (broken installation), falling back to subprocess")
-        import subprocess
-        os.makedirs(SANDBOX_TMPDIR, exist_ok=True)
-        proc = subprocess.run(
-            cmd, capture_output=True, timeout=timeout, cwd=SANDBOX_TMPDIR,
-        )
-        return proc.stdout.decode("utf-8", errors="replace"), proc.stderr.decode("utf-8", errors="replace"), proc.returncode == 0
-    except Exception as e:
-        logger.error(f"Sandbox execution failed: {e}")
-        return "", str(e), False
+    except (ImportError, ModuleNotFoundError):
+        pass
+    else:
+        try:
+            sandbox = Sandbox(
+                fs_writable=[tmpdir],
+                fs_readable=["/usr", "/lib", "/lib64", "/etc", "/bin", "/tmp"],
+                max_memory="512M",
+                max_processes=10,
+                clean_env=True,
+            )
+            result = sandbox.run(cmd, timeout=timeout)
+            return result.stdout.decode("utf-8", errors="replace"), result.stderr.decode("utf-8", errors="replace"), result.success
+        except Exception as e:
+            logger.warning(f"Sandlock execution failed, falling back to subprocess: {e}")
+
+    import subprocess
+    proc = subprocess.run(
+        cmd, capture_output=True, timeout=timeout, cwd=tmpdir,
+    )
+    return proc.stdout.decode("utf-8", errors="replace"), proc.stderr.decode("utf-8", errors="replace"), proc.returncode == 0
 
 
 class MCPGateway:
@@ -236,6 +236,7 @@ class MCPGateway:
                 "timeout": {"type": "integer", "description": "Timeout in seconds (default: 30)"},
             },
             handler=self._shell_handler,
+            required_params=["command"],
         ))
         self.register(ToolDefinition(
             name="python_executor",
@@ -245,6 +246,7 @@ class MCPGateway:
                 "timeout": {"type": "integer", "description": "Timeout in seconds (default: 60)"},
             },
             handler=self._python_handler,
+            required_params=["code"],
         ))
         self.register(ToolDefinition(
             name="file_reader",
@@ -254,6 +256,7 @@ class MCPGateway:
                 "encoding": {"type": "string", "description": "File encoding (default: utf-8)"},
             },
             handler=self._file_reader_handler,
+            required_params=["path"],
         ))
         self.register(ToolDefinition(
             name="file_writer",
@@ -264,6 +267,7 @@ class MCPGateway:
                 "encoding": {"type": "string", "description": "File encoding (default: utf-8)"},
             },
             handler=self._file_writer_handler,
+            required_params=["path", "content"],
         ))
         self.register(ToolDefinition(
             name="browser",
@@ -281,6 +285,7 @@ class MCPGateway:
                 "max_results": {"type": "integer", "description": "Max results (default: 10)"},
             },
             handler=self._search_handler,
+            required_params=["query"],
         ))
         self.register(ToolDefinition(
             name="webfetch",
@@ -346,11 +351,11 @@ class MCPGateway:
 
     @staticmethod
     def _python_handler(code: str, timeout: int = 60) -> str:
-        import tempfile
         import os as _os
+        import tempfile
         tmpdir = _os.environ.get("AGENTSWARM_WORKSPACE", SANDBOX_TMPDIR)
         _os.makedirs(tmpdir, exist_ok=True)
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", dir=SANDBOX_TMPDIR, delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", dir=tmpdir, delete=False) as f:
             f.write(code)
             tmp_path = f.name
         try:

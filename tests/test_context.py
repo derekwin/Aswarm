@@ -1,4 +1,3 @@
-import pytest
 from agent_swarm.context import ContextManager
 from agent_swarm.models import SubtaskResult, SubtaskState
 

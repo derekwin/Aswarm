@@ -1,52 +1,37 @@
-"""Swarm Orchestrator - 并行执行引擎，按 DAG 中的 parallel_groups 调度 Agent 执行。"""
+"""Swarm Orchestrator — parallel execution engine dispatching agents by DAG parallel_groups."""
 
 import asyncio
 import json
 import logging
+from collections.abc import Callable
+from typing import Any
 
-from agent_swarm.models import (
-    TaskDAG, SwarmState, SubtaskResult, SubtaskState, Subtask, AgentConfig
-)
-from agent_swarm.agent_factory import AgentFactory, Agent
-from agent_swarm.state_manager import StateManager
+from agent_swarm.agent_factory import Agent, AgentFactory
 from agent_swarm.context import get_context
 from agent_swarm.infrastructure.llm_client import LLMClient
 from agent_swarm.infrastructure.tool_registry import ToolRegistry
+from agent_swarm.meta_scheduler import MetaScheduler
+from agent_swarm.models import AgentConfig, Subtask, SubtaskResult, SubtaskState, SwarmState, TaskDAG
+from agent_swarm.state_manager import StateManager
 
 logger = logging.getLogger(__name__)
-
-RETRYABLE_ERRORS = (
-    asyncio.TimeoutError,
-    ConnectionError,
-    ConnectionRefusedError,
-    ConnectionResetError,
-)
 
 
 class ResultAggregator:
     """汇总所有子任务结果，生成最终输出。"""
 
     def aggregate(self, results: list[SubtaskResult]) -> str:
-        parts = []
-
-        for r in results:
-            header = f"## Subtask: {r.subtask_id} [{r.state.value}]"
-            parts.append(header)
-
-            if r.state == SubtaskState.COMPLETED and r.output:
-                parts.append(r.output)
-            elif r.state == SubtaskState.FAILED:
-                parts.append(f"**FAILED**: {r.error}")
-
-            parts.append("")
-
         completed = sum(1 for r in results if r.state == SubtaskState.COMPLETED)
         failed = sum(1 for r in results if r.state == SubtaskState.FAILED)
         summary = f"# Result Summary\n\n{completed}/{len(results)} subtasks completed"
         if failed:
             summary += f", {failed} failed"
 
-        return summary + "\n\n" + "\n".join(parts)
+        outputs = [r.output for r in results if r.state == SubtaskState.COMPLETED and r.output]
+        if outputs:
+            summary += "\n\n" + "\n\n".join(outputs)
+
+        return summary
 
 
 class SwarmOrchestrator:
@@ -59,6 +44,8 @@ class SwarmOrchestrator:
         state_manager: StateManager,
         llm: LLMClient,
         max_subtask_retries: int = 2,
+        on_event: Callable[[str, dict[str, Any]], None] | None = None,
+        is_cancelled: Callable[[], bool] | None = None,
     ):
         self.tools = tools
         self.factory = factory
@@ -66,21 +53,31 @@ class SwarmOrchestrator:
         self.llm = llm
         self.max_subtask_retries = max_subtask_retries
         self.aggregator = ResultAggregator()
+        self.on_event = on_event
+        self.is_cancelled = is_cancelled or (lambda: False)
+
+    def _check_cancelled(self) -> bool:
+        return self.is_cancelled()
+
+    def _emit(self, event_type: str, **data):
+        if self.on_event:
+            try:
+                result = self.on_event(event_type, data)
+                if asyncio.iscoroutine(result):
+                    asyncio.create_task(result)
+            except Exception:
+                logger.exception("Event callback failed")
 
     # ── LLM / Tool helpers ──
 
-    def _call_llm(self, model: str, messages: list, tools: list = None,
-                   temperature: float = 0.3) -> dict:
-        return self.llm.chat(model, messages, tools, temperature)
+    async def _call_llm(self, model: str, messages: list[dict], tools: list[dict] | None = None,
+                   temperature: float = 0.3):
+        return await self.llm.chat(model, messages, tools, temperature)
 
     async def _call_tool(self, name: str, **kwargs):
-        if isinstance(self.tools, ToolRegistry):
-            return await self.tools.call(name, **kwargs)
         return await self.tools.call(name, **kwargs)
 
     def _get_tool_schema(self, name: str) -> dict:
-        if isinstance(self.tools, ToolRegistry):
-            return self.tools.schema(name)
         return self.tools.get_schema(name)
 
     async def execute(self, dag: TaskDAG) -> SwarmState:
@@ -95,16 +92,23 @@ class SwarmOrchestrator:
         dag = state.dag
 
         while state.current_group < len(dag.parallel_groups):
+            if self._check_cancelled():
+                logger.info(f"Task {dag.task_id} cancelled during execution")
+                for sid, r in state.subtask_results.items():
+                    if r.state == SubtaskState.RUNNING:
+                        r.state = SubtaskState.FAILED
+                        r.error = "Task cancelled by user"
+                break
+
             group = dag.parallel_groups[state.current_group]
             logger.info(
                 f"Executing group {state.current_group + 1}/{len(dag.parallel_groups)}: {group}"
             )
 
-            # Self-correcting retry loop for the current parallel group
             pending_ids = list(group)
             results: dict[str, SubtaskResult] = {}
 
-            for attempt in range(self.max_subtask_retries + 1):  # 0 = first run
+            for attempt in range(self.max_subtask_retries + 1):
                 if not pending_ids:
                     break
 
@@ -116,7 +120,6 @@ class SwarmOrchestrator:
                     subtask = self._find_subtask(dag, subtask_id)
                     agent = self.factory.create(subtask.agent_config)
                     context = self._gather_context(state, subtask.depends_on)
-                    # On retries, enrich the prompt with previous feedback
                     prompt = subtask.prompt
                     if attempt > 0 and subtask_id in results:
                         prompt = self._regenerate_prompt(subtask.prompt, results[subtask_id], attempt)
@@ -135,7 +138,6 @@ class SwarmOrchestrator:
                             result.error = old.error
                     results[sid] = result
 
-                # Only retry FAILED subtasks (no quality gate — agents self-correct)
                 pending_ids = [
                     sid for sid, r in results.items()
                     if r.state == SubtaskState.FAILED and attempt < self.max_subtask_retries
@@ -185,7 +187,7 @@ class SwarmOrchestrator:
             return f"[Attempt {attempt + 1}]\n{original}\n\nPrevious issues: {'; '.join(notes)}\nRetry with a different approach."
         return original
 
-    async def _replan_subtask(self, dag: TaskDAG, subtask, failed_result: SubtaskResult):
+    async def _replan_subtask(self, dag: TaskDAG, subtask: Subtask, failed_result: SubtaskResult) -> Subtask | None:
         """Generate a replacement subtask when the original fails after max retries."""
         try:
             replan_prompt = (
@@ -198,12 +200,12 @@ class SwarmOrchestrator:
                 "\"system_prompt\": \"...\", \"tools\": [\"tool1\"], \"prompt\": \"new task prompt\"}"
             )
             msg = await self._call_llm(
-                "qwen3:4b",
+                self.factory.default_model,
                 [{"role": "user", "content": replan_prompt}],
                 temperature=0.5,
             )
-            raw = (msg.content if hasattr(msg, 'content') else msg.get('content', '')) or ""
-            parsed = json.loads(raw.strip().removeprefix("```json").removesuffix("```").strip())
+            raw = (msg.content or "").strip()
+            parsed = MetaScheduler._parse_json_output(raw)
             return Subtask(
                 id=subtask.id,
                 agent_config=AgentConfig(
@@ -222,6 +224,8 @@ class SwarmOrchestrator:
     async def _run_single_agent(
         self, subtask_id: str, agent: Agent, prompt: str, context: str = ""
     ) -> SubtaskResult:
+        self._emit("agent_start", subtask_id=subtask_id, agent_name=agent.name, role=agent.role)
+
         messages = self._build_messages(agent, prompt, context)
         tools = self._build_tools_schema(agent)
         has_search_tool = "search_engine" in agent.tool_names()
@@ -229,12 +233,19 @@ class SwarmOrchestrator:
         iteration = 0
         final_output = ""
         search_count = 0
-        active_tools = tools  # may be stripped on forced-output iteration
+        active_tools = tools
 
         while iteration < agent.max_iterations:
+            if self._check_cancelled():
+                return SubtaskResult(
+                    subtask_id=subtask_id,
+                    state=SubtaskState.FAILED,
+                    error="Task cancelled by user",
+                    iterations_used=iteration,
+                )
+
             iteration += 1
 
-            # Force output: if search agent has searched enough, remove tools
             if has_search_tool and search_count >= self.MAX_SEARCH_ROUNDS:
                 messages.append({
                     "role": "system",
@@ -243,11 +254,11 @@ class SwarmOrchestrator:
                         "STOP searching. Produce your final output NOW with the best information you have."
                     ),
                 })
-                active_tools = []  # force text-only response
-                has_search_tool = False  # prevent repeated forced-output messages
+                active_tools = []
+                has_search_tool = False
 
             try:
-                msg = await self._call_llm_with_retry(
+                msg = await self._call_llm(
                     model=agent.model,
                     messages=messages,
                     tools=active_tools,
@@ -255,7 +266,6 @@ class SwarmOrchestrator:
 
                 if msg.tool_calls:
                     messages = await self._handle_tool_calls(agent, msg.tool_calls, messages)
-                    # Count search_engine calls for enforcement
                     search_count += sum(
                         1 for tc in (msg.tool_calls or [])
                         if tc.function.name == "search_engine"
@@ -267,12 +277,15 @@ class SwarmOrchestrator:
 
             except Exception as e:
                 logger.error(f"Agent '{agent.name}' error at iteration {iteration}: {e}")
-                return SubtaskResult(
+                result = SubtaskResult(
                     subtask_id=subtask_id,
                     state=SubtaskState.FAILED,
                     error=str(e),
                     iterations_used=iteration,
                 )
+                self._emit("agent_done", subtask_id=subtask_id, state=result.state.value,
+                          output=result.output, error=result.error, retry_count=result.retry_count)
+                return result
 
         if not final_output and messages:
             for m in reversed(messages):
@@ -281,7 +294,7 @@ class SwarmOrchestrator:
                     break
 
         exhausted = iteration >= agent.max_iterations and not final_output
-        return SubtaskResult(
+        result = SubtaskResult(
             subtask_id=subtask_id,
             state=SubtaskState.COMPLETED if final_output else SubtaskState.FAILED,
             output=final_output or "No output generated",
@@ -291,9 +304,9 @@ class SwarmOrchestrator:
             ),
             iterations_used=iteration,
         )
-
-    async def _call_llm_with_retry(self, model: str, messages: list[dict], tools: list[dict] = None):
-        return await self._call_llm(model, messages, tools)
+        self._emit("agent_done", subtask_id=subtask_id, state=result.state.value,
+                  output=result.output, error=result.error, retry_count=result.retry_count)
+        return result
 
     async def _handle_tool_calls(self, agent: Agent, tool_calls, messages: list) -> list:
         for tool_call in tool_calls:
@@ -303,6 +316,7 @@ class SwarmOrchestrator:
             except Exception:
                 func_args = {}
 
+            self._emit("tool_call", agent_name=agent.name, tool=func_name, args=func_args)
             logger.info(f"  Agent '{agent.name}' calls tool: {func_name}")
 
             try:
@@ -331,13 +345,15 @@ class SwarmOrchestrator:
 
         return messages
 
-    # ─── 辅助方法 ───
+    # ─── Helper methods ───
 
     def _build_tools_schema(self, agent: Agent) -> list[dict]:
         tools = []
         for tool_name in agent.tool_names():
             try:
                 schema = self._get_tool_schema(tool_name)
+                tool_def = self.tools._tools.get(tool_name)
+                required = tool_def.required_params if (tool_def and tool_def.required_params is not None) else list(schema["parameters"].keys())
                 tools.append({
                     "type": "function",
                     "function": {
@@ -346,7 +362,7 @@ class SwarmOrchestrator:
                         "parameters": {
                             "type": "object",
                             "properties": schema["parameters"],
-                            "required": list(schema["parameters"].keys()),
+                            "required": required,
                         },
                     },
                 })
@@ -355,9 +371,7 @@ class SwarmOrchestrator:
         return tools
 
     def _build_messages(self, agent: Agent, prompt: str, context: str) -> list[dict]:
-        # Build smart context using ContextManager
         ctx_mgr = get_context()
-        # Parse upstream results from context string (format: "[t1]: output\n\n[t2]: output")
         upstream_results = []
         if context:
             for block in context.split("\n\n"):
@@ -367,7 +381,7 @@ class SwarmOrchestrator:
                         output=block, state=SubtaskState.COMPLETED
                     ))
         smart_context = ctx_mgr.build(agent.role, prompt, upstream_results)
-        
+
         capabilities = self._build_capabilities_block(agent.tool_names())
         full_system = agent.system_prompt + capabilities + "\n\n## Context\n" + smart_context if smart_context else agent.system_prompt + capabilities
 
@@ -377,14 +391,14 @@ class SwarmOrchestrator:
 
     def _build_capabilities_block(self, tool_names: list[str]) -> str:
         parts = ["\n\n---", "## Available Tools & Sandbox Environment", ""]
-        
+
         for name in tool_names:
             try:
                 schema = self._get_tool_schema(name)
                 parts.append(f"- **{name}**: {schema['description']}")
             except KeyError:
                 pass
-        
+
         if "python_executor" in tool_names:
             parts.extend([
                 "",
@@ -396,7 +410,7 @@ class SwarmOrchestrator:
                 "matplotlib can generate charts: plt.savefig('chart.png')",
                 "Even with incomplete data, run code on available data instead of claiming 'insufficient data'.",
             ])
-        
+
         if "search_engine" in tool_names:
             parts.extend([
                 "",
@@ -408,11 +422,11 @@ class SwarmOrchestrator:
                 "4. If pages have no useful data, search with different keywords and try again",
                 "5. After 4 rounds, STOP and output best available information",
             ])
-        
+
         return "\n".join(parts)
 
     @staticmethod
-    def _find_subtask(dag: TaskDAG, subtask_id: str):
+    def _find_subtask(dag: TaskDAG, subtask_id: str) -> Subtask:
         for s in dag.subtasks:
             if s.id == subtask_id:
                 return s

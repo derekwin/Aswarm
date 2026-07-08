@@ -1,12 +1,50 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
 *.egg-info/
 dist/
+build/
+
+# Coverage & lint caches
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Environment
+.env
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# OpenCode internal metadata
+.omo/
+
+# Runtime data
 checkpoints/
 data/
+
+# Frontend
 frontend/node_modules/
+backend/static/
+
+# Generated AI output markdown files
 *.md
 !README.md
+!CHANGELOG.md
+!LICENSE.md
+!CONTRIBUTING.md
 !docs/**/*.md
+!.github/**/*.md

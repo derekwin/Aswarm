@@ -1,9 +1,11 @@
+import os
 import tempfile
+import time
+
 import pytest
+
+from agent_swarm.models import AgentConfig, Subtask, SubtaskResult, SubtaskState, TaskDAG
 from agent_swarm.state_manager import StateManager
-from agent_swarm.models import (
-    TaskDAG, Subtask, AgentConfig, SwarmState, SubtaskState, SubtaskResult
-)
 
 
 @pytest.fixture
@@ -57,7 +59,7 @@ class TestStateManager:
             state = manager.update_subtask(state, result)
             state = manager.advance_group(state)
 
-            path = manager.checkpoint(state)
+            _ = manager.checkpoint(state)
 
             resumed = manager.resume("test_001")
 
@@ -70,3 +72,37 @@ class TestStateManager:
         manager = StateManager()
         with pytest.raises(FileNotFoundError):
             manager.resume("nonexistent_task")
+
+    def test_list_checkpoints(self, sample_dag):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = StateManager(checkpoint_dir=tmpdir)
+            state = manager.initialize("test_list", sample_dag)
+            manager.checkpoint(state)
+            time.sleep(1.1)
+            state = manager.advance_group(state)
+            manager.checkpoint(state)
+
+            checkpoints = manager.list_checkpoints("test_list")
+            assert len(checkpoints) == 2
+
+    def test_cleanup_keeps_latest(self, sample_dag):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = StateManager(checkpoint_dir=tmpdir)
+            task_id = "test_cleanup"
+            state = manager.initialize(task_id, sample_dag)
+            for i in range(5):
+                manager.checkpoint(state)
+                time.sleep(1.1)
+
+            assert len(manager.list_checkpoints(task_id)) == 5
+            manager.cleanup(task_id, keep_latest=2)
+            assert len(manager.list_checkpoints(task_id)) == 2
+
+    def test_resume_corrupted_checkpoint(self, sample_dag):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = StateManager(checkpoint_dir=tmpdir)
+            manager.initialize("test_corrupt", sample_dag)
+            with open(os.path.join(tmpdir, "test_corrupt_broken.json"), "w") as f:
+                f.write("{not valid json")
+            with pytest.raises(ValueError, match="Corrupted"):
+                manager.resume("test_corrupt")

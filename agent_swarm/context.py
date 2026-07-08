@@ -6,7 +6,7 @@ Design principles:
 - Each agent gets tailored context: search agents see relevant history, code agents see sandbox info
 """
 
-from agent_swarm.models import SubtaskResult
+from agent_swarm.models import SubtaskResult, SubtaskState
 
 
 class ContextManager:
@@ -20,11 +20,11 @@ class ContextManager:
     5. System defaults — always replaceable
     """
 
-    def __init__(self, max_chars: int = 3000):
+    def __init__(self, max_chars: int = 8000):
         self.max_chars = max_chars
 
     def build(self, agent_role: str, task_prompt: str,
-              upstream: list[SubtaskResult], history: list[str] = None) -> str:
+              upstream: list[SubtaskResult], history: list[str] | None = None) -> str:
         """Build optimized context string for an agent."""
         sections = []
 
@@ -51,8 +51,8 @@ class ContextManager:
     def _format_upstream(self, results: list[SubtaskResult]) -> str:
         """Format upstream results, preferring completed over failed."""
         parts = []
-        for r in sorted(results, key=lambda r: 0 if r.state.value == "completed" else 1):
-            if r.output and r.state.value == "completed":
+        for r in sorted(results, key=lambda r: 0 if r.state == SubtaskState.COMPLETED else 1):
+            if r.output and r.state == SubtaskState.COMPLETED:
                 parts.append(f"[{r.subtask_id}] {r.output[:500]}")
             elif r.error:
                 parts.append(f"[{r.subtask_id}] FAILED: {r.error[:200]}")
@@ -118,5 +118,7 @@ class ContextManager:
 _default_context = ContextManager()
 
 
-def get_context() -> ContextManager:
+def get_context(max_chars: int | None = None) -> ContextManager:
+    if max_chars is not None:
+        return ContextManager(max_chars=max_chars)
     return _default_context

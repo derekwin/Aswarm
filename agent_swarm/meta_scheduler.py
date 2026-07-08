@@ -1,22 +1,36 @@
 """Meta-Scheduler: task decomposition and DAG validation.
 
-Core flow: decompose → validate → TaskDAG
+Core flow: classify intent → decompose → validate → TaskDAG
 """
 
 import json
 import logging
-import uuid
 import re
+import uuid
 
-from agent_swarm.models import TaskDAG, Subtask, DivergenceWarning
+from agent_swarm.infrastructure.llm_client import LLMClient
+from agent_swarm.models import DivergenceWarning, Subtask, TaskDAG
 from agent_swarm.prompts.decomposer import (
     DECOMPOSER_SYSTEM_PROMPT,
+    DECOMPOSER_SYSTEM_PROMPT_ZH,
     DECOMPOSER_USER_TEMPLATE,
-    FEW_SHOT_EXAMPLES,
+    load_few_shot_examples,
 )
-from agent_swarm.infrastructure.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
+
+CLASSIFIER_SYSTEM_PROMPT = """You are a task classifier. Analyze user input and determine the task type.
+
+Type definitions:
+- research: requires searching, collecting information, investigation and analysis
+- code: requires writing, modifying, or reviewing code
+- write: requires writing documents, reports, or articles
+- analyze: requires data analysis, reasoning, or computation
+- multi: complex task containing multiple types
+
+Return only the type name, nothing else."""
+
+INTENT_OPTIONS = ("research", "code", "write", "analyze", "multi")
 
 
 class Router:
@@ -97,18 +111,20 @@ class MetaScheduler:
     Each subtask includes an on-the-fly Agent configuration.
 
     Usage:
-        scheduler = MetaScheduler(base_url="http://localhost:11434/v1", api_key="ollama")
-        dag = await scheduler.decompose("Research AI chip market", "research")
+        scheduler = MetaScheduler(llm=client, available_tools=["shell", "browser"], ...)
+        dag = await scheduler.decompose("Research AI chip market")
     """
 
     def __init__(
         self,
         llm: LLMClient,
+        available_tools: list[str] | None = None,
         decomposer_model: str = "qwen3.5:35b",
     ):
         self.llm = llm
         self.decomposer_model = decomposer_model
-        self.router = Router()
+        self.available_tools = available_tools or []
+        self.router = Router(self.available_tools)
         self._project_context: str | None = None
 
     def set_project(self, description: str):
@@ -117,14 +133,23 @@ class MetaScheduler:
     def check_if_divergent(self, query: str) -> DivergenceWarning | None:
         if not self._project_context:
             return None
-        context_lower = self._project_context.lower()
-        query_lower = query.lower()
-        keywords = set(context_lower.split()) - {
-            "的", "和", "与", "在", "是", "了", "the", "a", "an", "is", "of", "to", "in", "for"
-        }
-        keywords = {k for k in keywords if len(k) > 1}
-        overlap = sum(1 for kw in keywords if kw in query_lower)
-        if overlap == 0 and len(keywords) > 3:
+        stopwords = {"的", "和", "与", "在", "是", "了", "the", "a", "an", "is", "of", "to", "in", "for", "and", "or", "it", "on", "at", "with", "has", "had", "was", "were", "this", "that", "from"}
+        def significant_words(text: str) -> set[str]:
+            words = text.lower().split()
+            return {w for w in words if len(w) > 2 and w not in stopwords}
+
+        context_words = significant_words(self._project_context)
+        query_words = significant_words(query)
+
+        if not context_words or not query_words:
+            return DivergenceWarning(diverged=False)
+
+        # Jaccard similarity: intersection / union
+        intersection = context_words & query_words
+        union = context_words | query_words
+        similarity = len(intersection) / len(union) if union else 0
+
+        if similarity < 0.05 and len(context_words) > 3:
             return DivergenceWarning(
                 diverged=True,
                 current_project=f'"{self._project_context[:80]}"',
@@ -136,23 +161,47 @@ class MetaScheduler:
             )
         return DivergenceWarning(diverged=False)
 
-    async def decompose(self, query: str, intent: str = "multi") -> TaskDAG:
-        """任务分解 - 拆分任务 DAG 并现场生成 Agent 配置。"""
-        # 构建 few-shot 示例
+    async def classify_intent(self, query: str) -> str:
+        """Use a lightweight LLM call to classify the task intent."""
+        try:
+            msg = await self.llm.chat(
+                self.decomposer_model,
+                [
+                    {"role": "system", "content": CLASSIFIER_SYSTEM_PROMPT},
+                    {"role": "user", "content": f"Classify the following task:\n\n{query}"},
+                ],
+                temperature=0.1,
+            )
+            intent = (msg.content or "").strip().lower()
+            if intent in INTENT_OPTIONS:
+                return intent
+            logger.info(f"Unknown intent '{intent}', defaulting to 'multi'")
+        except Exception as e:
+            logger.warning(f"Intent classification failed: {e}")
+        return "multi"
+
+    async def decompose(self, query: str, intent: str | None = None, lang: str = "en") -> TaskDAG:
+        """任务分解 - 拆分任务 DAG 并现场生成 Agent 配置。
+
+        If intent is None, it will be auto-classified via LLM.
+        """
+        if intent is None:
+            intent = await self.classify_intent(query)
+
+        system_prompt = DECOMPOSER_SYSTEM_PROMPT_ZH if lang == "zh" else DECOMPOSER_SYSTEM_PROMPT
         few_shot_text = self._build_few_shot()
+
+        tools_str = ", ".join(self.available_tools) if self.available_tools else "browser, python_executor, file_reader, file_writer, shell, search_engine, webfetch"
 
         user_prompt = (
             few_shot_text
             + "\n---\n"
-            + DECOMPOSER_USER_TEMPLATE.format(
-                tools="browser, python_executor, file_reader, file_writer, shell, search_engine",
-                query=query,
-            )
+            + DECOMPOSER_USER_TEMPLATE.format(tools=tools_str, query=query)
         )
 
         raw_output = await self._call_llm(
             model=self.decomposer_model,
-            system_prompt=DECOMPOSER_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             user_prompt=user_prompt,
             temperature=0.3,
         )
@@ -164,18 +213,19 @@ class MetaScheduler:
         dag = TaskDAG(
             task_id=task_id,
             original_query=query,
-            intent=intent,
+            intent=parsed.get("intent", intent),
             subtasks=[Subtask.model_validate(s) for s in parsed["subtasks"]],
             parallel_groups=parsed["parallel_groups"],
         )
 
-        logger.info(f"Decomposed '{query[:50]}...' → {len(dag.subtasks)} subtasks")
+        logger.info(f"Decomposed '{query[:50]}...' → {len(dag.subtasks)} subtasks (intent: {dag.intent})")
         return dag
 
     @staticmethod
     def _build_few_shot() -> str:
+        examples = load_few_shot_examples()
         lines = ["Here are some task decomposition examples:\n"]
-        for i, example in enumerate(FEW_SHOT_EXAMPLES, 1):
+        for i, example in enumerate(examples, 1):
             lines.append(f"[Example {i}]")
             lines.append(f"User: {example['query']}")
             lines.append(f"Output: {json.dumps(example['output'], ensure_ascii=False, indent=2)}")
@@ -211,4 +261,4 @@ class MetaScheduler:
 
     async def _call_llm(self, model: str, system_prompt: str, user_prompt: str, temperature: float = 0.3) -> str:
         msg = await self.llm.chat(model, [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], temperature=temperature)
-        return (msg.content if hasattr(msg, 'content') else str(msg)).strip()
+        return (msg.content or "").strip()

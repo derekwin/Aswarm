@@ -5,7 +5,10 @@ Anti-corruption layer between business logic and external LLM providers.
 
 import asyncio
 import logging
+from typing import Any
+
 from openai import AsyncOpenAI
+from openai.types.chat import ChatCompletionMessage
 
 logger = logging.getLogger(__name__)
 
@@ -24,15 +27,15 @@ class LLMClient:
         self._client = AsyncOpenAI(base_url=base_url, api_key=api_key)
         self.max_retries = max_retries
 
-    async def chat(self, model: str, messages: list[dict], tools: list[dict] = None,
-                   temperature: float = 0.3, tool_choice: str = "auto") -> dict:
+    async def chat(self, model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None,
+                   temperature: float = 0.3, tool_choice: str = "auto") -> ChatCompletionMessage:
         """Send chat completion with retry. Returns the response choice message."""
-        kwargs = {"model": model, "messages": messages, "temperature": temperature}
+        kwargs: dict[str, Any] = {"model": model, "messages": messages, "temperature": temperature}
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = tool_choice
 
-        last_error = None
+        last_error: Exception | None = None
         for attempt in range(self.max_retries):
             try:
                 response = await self._client.chat.completions.create(**kwargs)
@@ -44,4 +47,4 @@ class LLMClient:
                 await asyncio.sleep(wait)
             except Exception:
                 raise  # non-retryable, propagate immediately
-        raise last_error
+        raise RuntimeError(f"LLM call failed after {self.max_retries} retries") from last_error

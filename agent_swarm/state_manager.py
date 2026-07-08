@@ -1,9 +1,11 @@
 """状态管理与 Checkpoint - 任务状态追踪、子任务结果记录、断点续跑。"""
 
+import glob
 import json
 import os
 from datetime import datetime
-from agent_swarm.models import TaskDAG, SwarmState, SubtaskResult
+
+from agent_swarm.models import SubtaskResult, SwarmState, TaskDAG
 
 
 class StateManager:
@@ -17,7 +19,9 @@ class StateManager:
     - 从 Checkpoint 恢复
     """
 
-    def __init__(self, checkpoint_dir: str = "./checkpoints"):
+    def __init__(self, checkpoint_dir: str | None = None):
+        if checkpoint_dir is None:
+            checkpoint_dir = os.environ.get("AGENTSWARM_CHECKPOINT_DIR", "./checkpoints")
         self.checkpoint_dir = checkpoint_dir
         os.makedirs(checkpoint_dir, exist_ok=True)
 
@@ -52,36 +56,33 @@ class StateManager:
 
     def resume(self, task_id: str) -> SwarmState:
         """从最新的 checkpoint 恢复任务状态。"""
-        checkpoints = sorted(
-            [f for f in os.listdir(self.checkpoint_dir) if f.startswith(task_id)],
-            reverse=True,
-        )
+        pattern = os.path.join(self.checkpoint_dir, f"{task_id}_*.json")
+        checkpoints = sorted(glob.glob(pattern), reverse=True)
         if not checkpoints:
             raise FileNotFoundError(
                 f"No checkpoint found for task '{task_id}' in {self.checkpoint_dir}"
             )
 
         latest = checkpoints[0]
-        path = os.path.join(self.checkpoint_dir, latest)
-
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        try:
+            with open(latest, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Corrupted checkpoint file: {latest}") from e
 
         state = SwarmState.model_validate(data)
-        state.checkpoint_path = path
+        state.checkpoint_path = latest
         return state
 
     def list_checkpoints(self, task_id: str | None = None) -> list[str]:
         """列出所有 checkpoint 文件。"""
-        files = os.listdir(self.checkpoint_dir)
-        if task_id:
-            files = [f for f in files if f.startswith(task_id)]
+        pattern = f"{task_id}_*.json" if task_id else "*.json"
+        files = glob.glob(os.path.join(self.checkpoint_dir, pattern))
         return sorted(files)
 
     def cleanup(self, task_id: str, keep_latest: int = 3):
         """清理旧 checkpoint，只保留最近 N 个。"""
-        checkpoints = sorted(
-            [f for f in os.listdir(self.checkpoint_dir) if f.startswith(task_id)]
-        )
+        pattern = os.path.join(self.checkpoint_dir, f"{task_id}_*.json")
+        checkpoints = sorted(glob.glob(pattern))
         for old in checkpoints[:-keep_latest]:
-            os.remove(os.path.join(self.checkpoint_dir, old))
+            os.remove(old)
