@@ -8,7 +8,8 @@ export default function AgentStatusList() {
   const t = useT();
 
   const agents = Object.values(conv.agents);
-  if (agents.length === 0) return null;
+  const hasValidAgents = agents.some(a => a.name && a.name !== '');
+  if (agents.length === 0 || !hasValidAgents) return null;
 
   const completed = agents.filter(a => a.state === 'completed' || a.state === 'failed').length;
   const total = agents.length;
