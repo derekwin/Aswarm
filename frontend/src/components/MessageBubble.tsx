@@ -2,16 +2,18 @@ import { lazy, Suspense, memo } from 'react';
 import { useConv } from '@/context/ConvContext';
 import { useT } from '@/hooks/useT';
 import AgentStatusList from '@/components/AgentStatusList';
+import ApprovalCard from '@/components/ApprovalCard';
 
 const Markdown = lazy(() => import('@/components/Markdown'));
 
 interface Props {
   index: number;
-  message: { role: string; content: string; typing?: boolean };
+  message: { role: string; content: string; typing?: boolean; approval?: { subtaskId: string; agentName: string; action: string; reasoning: string; riskLevel: string } };
   onEdit: (idx: number, text: string) => void;
+  taskId?: string;
 }
 
-const MessageBubble = memo(function MessageBubble({ index, message, onEdit }: Props) {
+const MessageBubble = memo(function MessageBubble({ index, message, onEdit, taskId }: Props) {
   const { state: conv } = useConv();
   const t = useT();
   const isAssistant = message.role === 'assistant';
@@ -36,12 +38,15 @@ const MessageBubble = memo(function MessageBubble({ index, message, onEdit }: Pr
               <Suspense fallback={<div className="animate-shimmer h-4 rounded bg-bg-surface w-3/4" />}>
                 <Markdown content={message.content} />
               </Suspense>
+              {message.approval && (
+                <ApprovalCard subtaskId={message.approval.subtaskId} taskId={taskId} />
+              )}
             </>
           )}
         </div>
         <div className={`flex gap-2 mt-0.5 px-1 opacity-0 group-hover:opacity-100 transition-opacity ${!isAssistant ? 'justify-end' : ''}`}>
           {!isAssistant && <button onClick={() => onEdit(index, message.content)} className="text-[11px] text-text-muted hover:text-accent font-medium" title={t('edit')}>{t('edit')}</button>}
-          {isAssistant && <button onClick={() => { navigator.clipboard.writeText(message.content).catch(() => {}); }} className="text-[11px] text-text-muted hover:text-accent font-medium" title={t('copy')}>{t('copy')}</button>}
+          {isAssistant && !message.approval && <button onClick={() => { navigator.clipboard.writeText(message.content).catch(() => {}); }} className="text-[11px] text-text-muted hover:text-accent font-medium" title={t('copy')}>{t('copy')}</button>}
         </div>
       </div>
     </div>

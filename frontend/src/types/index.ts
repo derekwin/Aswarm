@@ -43,6 +43,13 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   typing?: boolean;
+  approval?: {
+    subtaskId: string;
+    agentName: string;
+    action: string;
+    reasoning: string;
+    riskLevel: string;
+  };
 }
 
 // ── Agents ──

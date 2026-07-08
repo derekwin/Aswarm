@@ -3,9 +3,9 @@ import { useConv } from '@/context/ConvContext';
 import { useT } from '@/hooks/useT';
 import MessageBubble from '@/components/MessageBubble';
 
-interface Props { onEditRerun: (query: string) => void; }
+interface Props { onEditRerun: (query: string) => void; taskId?: string; }
 
-export default function ResultStream({ onEditRerun }: Props) {
+export default function ResultStream({ onEditRerun, taskId }: Props) {
   const { state: conv } = useConv();
   const t = useT();
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
@@ -84,7 +84,7 @@ export default function ResultStream({ onEditRerun }: Props) {
                 </div>
               </div>
             ) : (
-              <MessageBubble key={i} index={i} message={m} onEdit={startEdit} />
+              <MessageBubble key={i} index={i} message={m} onEdit={startEdit} taskId={taskId} />
             )
           ))}
         </div>

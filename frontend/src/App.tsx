@@ -19,13 +19,21 @@ import QuickStartPanel from '@/components/QuickStartPanel';
 function AppInner() {
   const { state: app } = useApp();
   const { state: conv, dispatch: convDispatch } = useConv();
-  const { dispatch: uiDispatch } = useUI();
+  const { state: ui, dispatch: uiDispatch } = useUI();
   const { runTask, reconnect, cancelTask, connectSSE, cleanupRefs } = useTaskRunner();
   const { panelWidth, onPanelResize } = usePanelWidth();
   const scrollRef = useRef<HTMLDivElement>(null);
   const loadingConvId = useRef<string | null>(null);
   const execStateRef = useRef(conv.execState);
   useEffect(() => { execStateRef.current = conv.execState; }, [conv.execState]);
+
+  // Auto-open right panel on large screens when agents are present
+  useEffect(() => {
+    const agentCount = Object.keys(conv.agents).length;
+    if (agentCount > 0 && window.innerWidth >= 1024 && !ui.panelMode) {
+      uiDispatch({ type: 'OPEN_PANEL', payload: 'agent' });
+    }
+  }, [conv.agents, uiDispatch, ui.panelMode]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -145,9 +153,10 @@ function AppInner() {
             <div className="flex-1 min-h-0 overflow-y-auto">
               <ResultStream
                 onEditRerun={(query) => { if (app.activeConvId) runTask(app.activeConvId, query); }}
+                taskId={conv.taskId || undefined}
               />
             </div>
-            {hasConvs && <InputBar onSend={runTask} onStop={cancelTask} taskId={conv.taskId || undefined} />}
+            {hasConvs && <InputBar onSend={runTask} onStop={cancelTask} />}
           </div>
         )}
       </main>

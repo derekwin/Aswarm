@@ -75,10 +75,18 @@ export function useTaskRunner() {
       case 'approval_request':
         convDispatch({ type: 'SET_EXEC_STATE', payload: 'waiting_approval' });
         convDispatch({
-          type: 'UPDATE_LAST_MSG',
+          type: 'APPEND_MSG',
           payload: {
-            content: `**⚠ Approval Required**\n\nAgent **${d.agent_name}** wants to:\n> ${d.action}\n\nReasoning: ${d.reasoning}\n\nRisk level: \`${d.risk_level}\`\n\n_Click Approve or Reject below — task will resume with your decision._`,
+            role: 'assistant',
+            content: `**⚠ Approval Required**\n\nAgent **${d.agent_name}** wants to:\n> ${d.action}\n\n**Reasoning:** ${d.reasoning}\n\n**Risk level:** \`${d.risk_level}\``,
             typing: false,
+            approval: {
+              subtaskId: d.subtask_id,
+              agentName: d.agent_name,
+              action: d.action,
+              reasoning: d.reasoning,
+              riskLevel: d.risk_level,
+            },
           },
         });
         break;

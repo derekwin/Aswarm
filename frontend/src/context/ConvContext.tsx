@@ -57,6 +57,7 @@ type ConvAction =
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'APPEND_MSG'; payload: Message }
   | { type: 'UPDATE_LAST_MSG'; payload: Partial<Message> }
+  | { type: 'RESOLVE_APPROVAL_MSG'; payload: { resolved: string } }
   | { type: 'SET_DAG'; payload: { dag: DAGData; totalAgents: number } }
   | { type: 'UPDATE_AGENT'; payload: { id: string; data: Partial<AgentState> } }
   | { type: 'INCREMENT_COMPLETED'; payload?: { subtaskId: string } }
@@ -95,6 +96,21 @@ function convReducer(state: ConvState, action: ConvAction): ConvState {
         msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], ...action.payload };
       } else {
         msgs.push({ role: 'assistant', content: action.payload.content || '', ...action.payload });
+      }
+      return { ...state, messages: msgs };
+    }
+    case 'RESOLVE_APPROVAL_MSG': {
+      // Replace the latest approval message with a resolved note
+      const msgs = [...state.messages];
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i].approval) {
+          msgs[i] = {
+            ...msgs[i],
+            approval: undefined,
+            content: msgs[i].content + `\n\n> _${action.payload.resolved}_`,
+          };
+          break;
+        }
       }
       return { ...state, messages: msgs };
     }
