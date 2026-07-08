@@ -443,6 +443,81 @@ async def get_agent_trace(task_id: str, subtask_id: str):
     }
 
 
+# ── Checkpoint API ──
+
+@app.get("/api/checkpoints/{task_id}")
+async def list_checkpoints(task_id: str):
+    """List available checkpoints for a task with metadata."""
+    state_manager = StateManager(
+        checkpoint_dir=os.environ.get("AGENTSWARM_CHECKPOINT_DIR", "./checkpoints"),
+    )
+    return await asyncio.to_thread(state_manager.list_checkpoints, task_id)
+
+
+@app.post("/api/checkpoints/{task_id}/resume")
+async def resume_from_checkpoint(task_id: str, checkpoint_path: str = Query(default="")):
+    """Resume task execution from a specific checkpoint."""
+    convs = await storage.list_conversations()
+    task = await storage.get_task(task_id)
+    if not task:
+        raise HTTPException(404, "Task not found")
+
+    new_task_id = f"resume_{task_id}_{_uuid.uuid4().hex[:6]}"
+    _streams[new_task_id] = asyncio.Queue()
+    await storage.create_task(new_task_id, task["conversation_id"], f"Resume from checkpoint: {task.get('query', task_id)}")
+    asyncio.create_task(_execute_resume(new_task_id, task_id, checkpoint_path or None))
+    return {"task_id": new_task_id, "original_task_id": task_id}
+
+
+async def _execute_resume(new_task_id: str, original_task_id: str, checkpoint_path: str | None):
+    """Execute a task resumed from a checkpoint."""
+    try:
+        settings = await _load_settings()
+        tools = ToolRegistry()
+        llm = LLMClient(base_url=settings["llm_base_url"], api_key=settings["llm_api_key"])
+        factory = AgentFactory(available_tools=set(tools.available_tools()), default_model=settings["default_model"])
+        state_manager = StateManager(
+            checkpoint_dir=os.environ.get("AGENTSWARM_CHECKPOINT_DIR", "./checkpoints"),
+        )
+        budget = BudgetTracker(token_limit=int(settings.get("budget_token_limit", 200000)))
+        llm.set_budget(budget)
+
+        state = await asyncio.to_thread(state_manager.resume, original_task_id, checkpoint_path)
+        dag = state.dag
+
+        orchestrator = SwarmOrchestrator(
+            tools=tools, llm=llm, factory=factory, state_manager=state_manager,
+            max_subtask_retries=2,
+            is_cancelled=lambda: _cancel_flags.get(new_task_id, False),
+        )
+
+        subtask_info = [
+            {"id": s.id, "name": s.agent_config.name, "role": s.agent_config.role,
+             "tools": s.agent_config.tools, "depends_on": s.depends_on}
+            for s in dag.subtasks
+        ]
+        _push_event(new_task_id, {
+            "type": "dag", "intent": dag.intent,
+            "subtasks": subtask_info, "parallel_groups": dag.parallel_groups,
+        })
+        _dag_snapshots[new_task_id] = {"type": "dag", "intent": dag.intent, "subtasks": subtask_info, "parallel_groups": dag.parallel_groups}
+        _push_event(new_task_id, {"type": "exec_state", "state": "streaming"})
+
+        state = await orchestrator._execute_from_state(state)
+        results = [{"id": r.subtask_id, "state": r.state.value, "output": r.output, "error": r.error}
+                   for r in state.subtask_results.values()]
+        summary = orchestrator.aggregator.aggregate(list(state.subtask_results.values()))
+        await storage.add_message(task["conversation_id"], "assistant", summary) if False else None
+        _push_event(new_task_id, {"type": "done", "summary": summary, "results": results})
+
+    except Exception as e:
+        _push_event(new_task_id, {"type": "error", "msg": str(e), "code": _classify_error(e)})
+    finally:
+        await asyncio.sleep(30)
+        _streams.pop(new_task_id, None)
+        _dag_snapshots.pop(new_task_id, None)
+
+
 # ── Rerun API ──
 
 @app.post("/api/rerun/{task_id}/{subtask_id}")

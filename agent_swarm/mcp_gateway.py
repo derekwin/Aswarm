@@ -295,6 +295,37 @@ class MCPGateway:
             },
             handler=self._webfetch_handler,
         ))
+        # Office Skills
+        self.register(ToolDefinition(
+            name="generate_xlsx",
+            description="Generate an Excel (.xlsx) file from structured data. Input: JSON with 'sheets' (dict of sheet name → list of row dicts) and optional 'filename'.",
+            parameters={
+                "filename": {"type": "string", "description": "Output filename (e.g. 'analysis.xlsx')"},
+                "data": {"type": "string", "description": "JSON string: {\"sheets\": {\"Sheet1\": [{\"col\": \"val\"}]}}"},
+            },
+            handler=self._xlsx_handler,
+            required_params=["filename", "data"],
+        ))
+        self.register(ToolDefinition(
+            name="generate_docx",
+            description="Generate a Word (.docx) document. Input: JSON with 'title', 'sections' (list of {\"heading\": \"...\", \"body\": \"...\"}), and optional 'filename'.",
+            parameters={
+                "filename": {"type": "string", "description": "Output filename (e.g. 'report.docx')"},
+                "content": {"type": "string", "description": "JSON string: {\"title\": \"...\", \"sections\": [{\"heading\": \"...\", \"body\": \"...\"}]}"},
+            },
+            handler=self._docx_handler,
+            required_params=["filename", "content"],
+        ))
+        self.register(ToolDefinition(
+            name="generate_pptx",
+            description="Generate a PowerPoint (.pptx) presentation. Input: JSON with 'title', 'slides' (list of {\"title\": \"...\", \"bullets\": [...]}), and optional 'filename'.",
+            parameters={
+                "filename": {"type": "string", "description": "Output filename (e.g. 'presentation.pptx')"},
+                "content": {"type": "string", "description": "JSON string: {\"title\": \"...\", \"slides\": [{\"title\": \"...\", \"bullets\": [...]}]}"},
+            },
+            handler=self._pptx_handler,
+            required_params=["filename", "content"],
+        ))
 
     def register(self, tool: ToolDefinition):
         """注册工具。"""
@@ -434,3 +465,41 @@ class MCPGateway:
         except Exception as e:
             logger.warning(f"Webfetch failed for '{url[:60]}': {e}")
             return f"Error fetching {url}: {e}"
+
+    # ─── Office Skills Handlers ───
+
+    @staticmethod
+    def _xlsx_handler(filename: str, data: str) -> str:
+        import json as _json
+        import os as _os
+        try:
+            parsed = _json.loads(data)
+        except _json.JSONDecodeError:
+            return "Error: data must be valid JSON like {\"sheets\": {\"Sheet1\": [{\"col\": \"val\"}]}}"
+        ws = _os.environ.get("AGENTSWARM_WORKSPACE", "")
+        from agent_swarm.office_skills import generate_xlsx
+        return generate_xlsx(filename, parsed, ws)
+
+    @staticmethod
+    def _docx_handler(filename: str, content: str) -> str:
+        import json as _json
+        import os as _os
+        try:
+            parsed = _json.loads(content)
+        except _json.JSONDecodeError:
+            return "Error: content must be valid JSON"
+        ws = _os.environ.get("AGENTSWARM_WORKSPACE", "")
+        from agent_swarm.office_skills import generate_docx
+        return generate_docx(filename, parsed, ws)
+
+    @staticmethod
+    def _pptx_handler(filename: str, content: str) -> str:
+        import json as _json
+        import os as _os
+        try:
+            parsed = _json.loads(content)
+        except _json.JSONDecodeError:
+            return "Error: content must be valid JSON"
+        ws = _os.environ.get("AGENTSWARM_WORKSPACE", "")
+        from agent_swarm.office_skills import generate_pptx
+        return generate_pptx(filename, parsed, ws)

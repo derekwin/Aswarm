@@ -54,16 +54,26 @@ class StateManager:
 
         return path
 
-    def resume(self, task_id: str) -> SwarmState:
-        """从最新的 checkpoint 恢复任务状态。"""
-        pattern = os.path.join(self.checkpoint_dir, f"{task_id}_*.json")
-        checkpoints = sorted(glob.glob(pattern), reverse=True)
-        if not checkpoints:
-            raise FileNotFoundError(
-                f"No checkpoint found for task '{task_id}' in {self.checkpoint_dir}"
-            )
+    def resume(self, task_id: str, checkpoint_path: str | None = None) -> SwarmState:
+        """从 checkpoint 恢复任务状态。
 
-        latest = checkpoints[0]
+        Args:
+            task_id: task identifier
+            checkpoint_path: optional specific checkpoint file path. If None, uses the latest.
+        """
+        if checkpoint_path:
+            if not os.path.exists(checkpoint_path):
+                raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+            latest = checkpoint_path
+        else:
+            pattern = os.path.join(self.checkpoint_dir, f"{task_id}_*.json")
+            checkpoints = sorted(glob.glob(pattern), reverse=True)
+            if not checkpoints:
+                raise FileNotFoundError(
+                    f"No checkpoint found for task '{task_id}' in {self.checkpoint_dir}"
+                )
+            latest = checkpoints[0]
+
         try:
             with open(latest, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -74,11 +84,26 @@ class StateManager:
         state.checkpoint_path = latest
         return state
 
-    def list_checkpoints(self, task_id: str | None = None) -> list[str]:
-        """列出所有 checkpoint 文件。"""
+    def list_checkpoints(self, task_id: str | None = None) -> list[dict]:
+        """列出所有 checkpoint 文件，包含元数据。"""
         pattern = f"{task_id}_*.json" if task_id else "*.json"
-        files = glob.glob(os.path.join(self.checkpoint_dir, pattern))
-        return sorted(files)
+        files = sorted(glob.glob(os.path.join(self.checkpoint_dir, pattern)), reverse=True)
+        result = []
+        for f in files:
+            try:
+                with open(f, "r", encoding="utf-8") as fp:
+                    data = json.load(fp)
+                result.append({
+                    "path": f,
+                    "task_id": data.get("task_id", ""),
+                    "current_group": data.get("current_group", 0),
+                    "subtasks": len(data.get("subtask_results", {})),
+                    "completed": sum(1 for r in data.get("subtask_results", {}).values() if r.get("state") == "completed"),
+                    "failed": sum(1 for r in data.get("subtask_results", {}).values() if r.get("state") == "failed"),
+                })
+            except (json.JSONDecodeError, KeyError):
+                result.append({"path": f, "task_id": "", "current_group": 0, "subtasks": 0, "completed": 0, "failed": 0, "corrupted": True})
+        return result
 
     def cleanup(self, task_id: str, keep_latest: int = 3):
         """清理旧 checkpoint，只保留最近 N 个。keep_latest=0 removes all."""
