@@ -49,8 +49,7 @@ export function useTaskRunner() {
       case 'dag':
         convDispatch({ type: 'SET_DAG', payload: { dag: { intent: d.intent, subtasks: d.subtasks, parallel_groups: d.parallel_groups }, totalAgents: d.subtasks.length } });
         convDispatch({ type: 'SET_EXEC_STATE', payload: 'streaming' });
-        // Update the decomposing placeholder → agent-ready message
-        convDispatch({ type: 'UPDATE_LAST_MSG', payload: { content: d.subtasks.length + ' agents ready · ' + (d.intent || 'executing...'), typing: false } });
+        // AgentStatusList in the first assistant bubble already shows agent count
         break;
       case 'agent_start':
         startTimeRef.current[d.subtask_id] = Date.now();
