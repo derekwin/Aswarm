@@ -58,7 +58,20 @@ function AppInner() {
       // Cancel without API call (silent), fire-and-forget is safe here
       cancelTask(true);
     }
-    uiDispatch({ type: 'CLOSE_PANEL' });
+    // Close panel on conversation switch — unless the new conv already has agents in cache
+    let hasCachedAgents = false;
+    if (activeId) {
+      try {
+        const cached = localStorage.getItem(`conv:${activeId}`);
+        if (cached) {
+          const entry = JSON.parse(cached);
+          hasCachedAgents = Object.keys(entry.agents || {}).length > 0;
+        }
+      } catch { /* ignore */ }
+    }
+    if (!hasCachedAgents) {
+      uiDispatch({ type: 'CLOSE_PANEL' });
+    }
     convDispatch({ type: 'RESET' });
     cleanupRefs();
     if (!activeId) return;
