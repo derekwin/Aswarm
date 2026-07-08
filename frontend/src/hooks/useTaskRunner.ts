@@ -44,16 +44,13 @@ export function useTaskRunner() {
         break;
       case 'exec_state':
         convDispatch({ type: 'SET_EXEC_STATE', payload: d.state });
-        if (d.state === 'decomposing') {
-          convDispatch({ type: 'APPEND_MSG', payload: { role: 'assistant', content: t('decomposing'), typing: true } });
-        } else if (d.state === 'streaming') {
-          convDispatch({ type: 'APPEND_MSG', payload: { role: 'assistant', content: t('executing'), typing: false } });
-        }
+        // runTask already appended a decomposing/typing message — don't duplicate
         break;
       case 'dag':
         convDispatch({ type: 'SET_DAG', payload: { dag: { intent: d.intent, subtasks: d.subtasks, parallel_groups: d.parallel_groups }, totalAgents: d.subtasks.length } });
         convDispatch({ type: 'SET_EXEC_STATE', payload: 'streaming' });
-        convDispatch({ type: 'APPEND_MSG', payload: { role: 'assistant', content: d.subtasks.length + ' agents ready · ' + (d.intent || 'executing...'), typing: false } });
+        // Update the decomposing placeholder → agent-ready message
+        convDispatch({ type: 'UPDATE_LAST_MSG', payload: { content: d.subtasks.length + ' agents ready · ' + (d.intent || 'executing...'), typing: false } });
         break;
       case 'agent_start':
         startTimeRef.current[d.subtask_id] = Date.now();
