@@ -45,19 +45,17 @@ export function useTaskRunner() {
       case 'exec_state':
         convDispatch({ type: 'SET_EXEC_STATE', payload: d.state });
         if (d.state === 'decomposing') {
-          convDispatch({ type: 'UPDATE_LAST_MSG', payload: { content: t('decomposing'), typing: true } });
-        } else if (d.state === 'streaming' && execStateRef.current !== 'waiting_approval') {
-          // Don't replace the approval card when resuming from HITL
+          convDispatch({ type: 'APPEND_MSG', payload: { role: 'assistant', content: t('decomposing'), typing: true } });
+        } else if (d.state === 'streaming') {
           convDispatch({ type: 'APPEND_MSG', payload: { role: 'assistant', content: t('executing'), typing: false } });
         }
         break;
       case 'dag':
         convDispatch({ type: 'SET_DAG', payload: { dag: { intent: d.intent, subtasks: d.subtasks, parallel_groups: d.parallel_groups }, totalAgents: d.subtasks.length } });
         convDispatch({ type: 'SET_EXEC_STATE', payload: 'streaming' });
-        // Only show the 'N agents ready' message if not resuming from approval
-        if (execStateRef.current !== 'waiting_approval') {
-          convDispatch({ type: 'UPDATE_LAST_MSG', payload: { content: d.subtasks.length + ' agents ready: ' + (d.intent || 'executing...'), typing: false } });
-        }
+        // Use APPEND_MSG — this is a new status event, don't overwrite the last assistant message
+        // (critical during SSE reconnect replay after HITL approval)
+        convDispatch({ type: 'APPEND_MSG', payload: { role: 'assistant', content: d.subtasks.length + ' agents ready · ' + (d.intent || 'executing...'), typing: false } });
         break;
       case 'agent_start':
         startTimeRef.current[d.subtask_id] = Date.now();
