@@ -19,7 +19,10 @@ export default function SettingsModal() {
     default_model: app.settings?.default_model || '',
   }), [app.settings]);
 
-  const [cfg, setCfg] = useState<Settings>(defaultSettings);
+  const [baseUrl, setBaseUrl] = useState(defaultSettings.llm_base_url || '');
+  const [apiKey, setApiKey] = useState(defaultSettings.llm_api_key || '');
+  const [decomposerModel, setDecomposerModel] = useState(defaultSettings.decomposer_model || '');
+  const [defaultModel, setDefaultModel] = useState(defaultSettings.default_model || '');
 
   const applyProvider = (p: string) => {
     setProvider(p);
@@ -29,12 +32,14 @@ export default function SettingsModal() {
       anthropic: { llm_base_url: 'https://api.anthropic.com/v1', llm_api_key: '' },
     };
     const d = defaults[p] || {};
-    setCfg(prev => ({ ...prev, ...d }));
+    if (d.llm_base_url !== undefined) setBaseUrl(d.llm_base_url);
+    if (d.llm_api_key !== undefined) setApiKey(d.llm_api_key);
   };
 
   const save = async () => {
     try {
-      const savedSettings = await api.saveSettings(cfg);
+      const savedCfg: Settings = { llm_base_url: baseUrl, llm_api_key: apiKey, decomposer_model: decomposerModel, default_model: defaultModel };
+      const savedSettings = await api.saveSettings(savedCfg);
       appDispatch({ type: 'SET_SETTINGS', payload: savedSettings });
       setSaved(true);
       setTimeout(() => { setSaved(false); uiDispatch({ type: 'SET_SETTINGS_OPEN', payload: false }); }, 600);
@@ -62,21 +67,21 @@ export default function SettingsModal() {
         <div className="p-4 flex flex-col gap-4 overflow-y-auto">
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-text-secondary">{t('baseUrl')}</label>
-            <input value={cfg.llm_base_url} onChange={e => setCfg({ ...cfg, llm_base_url: e.target.value })} className="input-base" />
+            <input value={baseUrl} onChange={e => setBaseUrl(e.target.value)} className="input-base" />
           </div>
           {provider !== 'ollama' && (
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-text-secondary">{t('apiKey')}</label>
-              <input value={cfg.llm_api_key} onChange={e => setCfg({ ...cfg, llm_api_key: e.target.value })} className="input-base" />
+              <input value={apiKey} onChange={e => setApiKey(e.target.value)} className="input-base" />
             </div>
           )}
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-text-secondary">{t('decomposerModel')}</label>
-            <input value={cfg.decomposer_model} onChange={e => setCfg({ ...cfg, decomposer_model: e.target.value })} className="input-base" />
+            <input value={decomposerModel} onChange={e => setDecomposerModel(e.target.value)} className="input-base" />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-text-secondary">{t('defaultModel')}</label>
-            <input value={cfg.default_model} onChange={e => setCfg({ ...cfg, default_model: e.target.value })} className="input-base" />
+            <input value={defaultModel} onChange={e => setDefaultModel(e.target.value)} className="input-base" />
           </div>
         </div>
         <button className={`btn-primary btn-md m-4 transition-all ${saved ? '!bg-success scale-105' : ''}`} onClick={save}>
