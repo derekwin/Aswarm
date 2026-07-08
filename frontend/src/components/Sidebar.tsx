@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { useUI } from '@/context/UIContext';
 import { useT } from '@/hooks/useT';

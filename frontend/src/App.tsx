@@ -19,7 +19,7 @@ import QuickStartPanel from '@/components/QuickStartPanel';
 function AppInner() {
   const { state: app } = useApp();
   const { state: conv, dispatch: convDispatch } = useConv();
-  const { state: ui, dispatch: uiDispatch } = useUI();
+  const { dispatch: uiDispatch } = useUI();
   const { runTask, reconnect, cancelTask, connectSSE, cleanupRefs } = useTaskRunner();
   const { panelWidth, onPanelResize } = usePanelWidth();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -46,7 +46,10 @@ function AppInner() {
   useLayoutEffect(() => {
     const activeId = app.activeConvId;
     const execing = execStateRef.current === 'streaming' || execStateRef.current === 'decomposing' || execStateRef.current === 'reconnecting';
-    if (execing) cancelTask(true);
+    if (execing) {
+      // Cancel without API call (silent), fire-and-forget is safe here
+      cancelTask(true);
+    }
     uiDispatch({ type: 'CLOSE_PANEL' });
     convDispatch({ type: 'RESET' });
     cleanupRefs();
@@ -78,8 +81,8 @@ function AppInner() {
     ]).then(([convData, taskData]) => {
       if (loadingConvId.current !== activeId) return;
 
-      if (convData?.messages && !snapshotRestored) {
-        const msgs = convData.messages.map((m: { role: string; content: string }) => ({
+      if (convData && !snapshotRestored) {
+        const msgs = (convData.messages || []).map((m: { role: string; content: string }) => ({
           role: m.role as 'user' | 'assistant', content: m.content,
         }));
         convDispatch({ type: 'LOAD', payload: { messages: msgs } });

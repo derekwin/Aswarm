@@ -64,7 +64,8 @@ class SwarmOrchestrator:
             try:
                 result = self.on_event(event_type, data)
                 if asyncio.iscoroutine(result):
-                    asyncio.create_task(result)
+                    task = asyncio.create_task(result)
+                    task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
             except Exception:
                 logger.exception("Event callback failed")
 
@@ -297,7 +298,7 @@ class SwarmOrchestrator:
         result = SubtaskResult(
             subtask_id=subtask_id,
             state=SubtaskState.COMPLETED if final_output else SubtaskState.FAILED,
-            output=final_output or "No output generated",
+            output=final_output if final_output else None,
             error=(
                 f"Agent exhausted {agent.max_iterations} iterations without producing output"
                 if exhausted else None
@@ -309,6 +310,25 @@ class SwarmOrchestrator:
         return result
 
     async def _handle_tool_calls(self, agent: Agent, tool_calls, messages: list) -> list:
+        # Collect all tool_calls into one assistant message (OpenAI API expects this)
+        assistant_tool_calls = []
+        for tool_call in tool_calls:
+            func_name = tool_call.function.name
+            assistant_tool_calls.append({
+                "id": tool_call.id,
+                "type": "function",
+                "function": {
+                    "name": func_name,
+                    "arguments": tool_call.function.arguments,
+                },
+            })
+
+        messages.append({
+            "role": "assistant",
+            "content": None,
+            "tool_calls": assistant_tool_calls,
+        })
+
         for tool_call in tool_calls:
             func_name = tool_call.function.name
             try:
@@ -325,18 +345,6 @@ class SwarmOrchestrator:
             except Exception as e:
                 tool_result_str = f"Tool call failed: {e}"
 
-            messages.append({
-                "role": "assistant",
-                "content": None,
-                "tool_calls": [{
-                    "id": tool_call.id,
-                    "type": "function",
-                    "function": {
-                        "name": func_name,
-                        "arguments": tool_call.function.arguments,
-                    },
-                }],
-            })
             messages.append({
                 "role": "tool",
                 "tool_call_id": tool_call.id,
@@ -376,8 +384,13 @@ class SwarmOrchestrator:
         if context:
             for block in context.split("\n\n"):
                 if block.strip():
+                    # Extract subtask_id safely from the block prefix "[t1]: ..."
+                    subtask_id = "unknown"
+                    if block.startswith("[") and "]: " in block:
+                        end_bracket = block.index("]")
+                        subtask_id = block[1:end_bracket]
                     upstream_results.append(SubtaskResult(
-                        subtask_id=block.split("]:")[0].replace("[", "") if "]: " in block else "unknown",
+                        subtask_id=subtask_id,
                         output=block, state=SubtaskState.COMPLETED
                     ))
         smart_context = ctx_mgr.build(agent.role, prompt, upstream_results)

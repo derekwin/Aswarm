@@ -105,7 +105,9 @@ class ContextManager:
             if current_total <= budget:
                 break
             if level == "history":
-                compressed[level] = compressed[level][:200] + "\n(history truncated)"
+                # Keep first and last 100 chars to preserve context boundaries
+                text = compressed[level]
+                compressed[level] = text[:100] + "\n(history truncated)\n" + (text[-100:] if len(text) > 200 else "")
             elif level == "tips":
                 compressed[level] = ""
             elif level == "upstream":

@@ -33,6 +33,9 @@ export function useTaskRunner() {
   const lastEventIdRef = useRef<number>(0);
   const debounceTimer = useRef(0);
   const startTimeRef = useRef<Record<string, number>>({});
+  const reconnectAttemptRef = useRef(0);
+  const pollTimerRef = useRef(0);
+  const pollActiveRef = useRef(false);
 
   const handleSSEEvent = useCallback((d: SSEEvent, es: EventSource) => {
     switch (d.type) {
@@ -71,7 +74,7 @@ export function useTaskRunner() {
         uiDispatch({ type: 'SET_CONNECTED', payload: false });
         if (d.summary) convDispatch({ type: 'APPEND_MSG', payload: { role: 'assistant', content: d.summary } });
         convDispatch({ type: 'SET_EXEC_STATE', payload: 'completed' });
-        es.close();
+        es?.close?.();
         uiDispatch({ type: 'ADD_TOAST', payload: `✓ ${t('complete')}` });
         break;
       }
@@ -141,6 +144,8 @@ export function useTaskRunner() {
   useEffect(() => {
     return () => {
       eventSourceRef.current?.close();
+      pollActiveRef.current = false;
+      clearTimeout(pollTimerRef.current);
     };
   }, []);
 
@@ -161,6 +166,12 @@ export function useTaskRunner() {
           lastEventIdRef.current = parseInt(e.lastEventId, 10);
           convDispatch({ type: 'SET_LAST_EVENT_ID', payload: lastEventIdRef.current });
         }
+        // Reset backoff on successful message and stop polling
+        reconnectAttemptRef.current = 0;
+        if (pollActiveRef.current) {
+          pollActiveRef.current = false;
+          clearTimeout(pollTimerRef.current);
+        }
         handleSSEEvent(d, es);
       } catch { /* malformed SSE data, ignore */ }
     };
@@ -169,34 +180,37 @@ export function useTaskRunner() {
       es.close();
       const isRunning = execStateRef.current === 'streaming' || execStateRef.current === 'reconnecting';
       if (isRunning) {
-        // Reconnect with exponential backoff using lastEventId for gap recovery
-        const delay = 1000;
+        // Exponential backoff reconnection with lastEventId for gap recovery
+        reconnectAttemptRef.current += 1;
+        const delay = Math.min(1000 * (2 ** (reconnectAttemptRef.current - 1)), 30000);
         setTimeout(() => {
           if (execStateRef.current === 'streaming' || execStateRef.current === 'reconnecting') {
             connectSSERef.current?.(taskId, lastEventIdRef.current);
           }
         }, delay);
-        // Fallback: poll via REST (recursive setTimeout to avoid overlap)
-        let pollActive = true;
-        const poll = async () => {
-          if (!pollActive || !convIdRef.current) return;
-          try {
-            const data = await api.getRunningTask(convIdRef.current);
-            if (!data.task || data.task.id !== taskId) { pollActive = false; return; }
-            if (data.task.status === 'completed' || data.task.status === 'failed' || data.task.status === 'cancelled') {
-              pollActive = false;
-              convDispatch({ type: 'SET_EXEC_STATE', payload: data.task.status === 'completed' ? 'completed' : 'failed' });
-              // Try SSE reconnect on next user interaction
-              return;
-            }
-            for (const r of (data.agent_results || [])) {
-              convDispatch({ type: 'UPDATE_AGENT', payload: { id: r.subtask_id, data: { state: r.state as 'pending' | 'running' | 'completed' | 'failed', output: r.output, error: r.error } } });
-            }
-          } catch { pollActive = false; }
-          if (pollActive) setTimeout(poll, 2000);
-        };
-        setTimeout(poll, 2000);
-        uiDispatch({ type: 'ADD_TOAST', payload: '⚠ Polling for updates...' });
+
+        // Fallback: poll via REST — only start if not already polling
+        if (!pollActiveRef.current) {
+          pollActiveRef.current = true;
+          const poll = async () => {
+            if (!pollActiveRef.current || !convIdRef.current) return;
+            try {
+              const data = await api.getRunningTask(convIdRef.current);
+              if (!data.task || data.task.id !== taskId) { pollActiveRef.current = false; return; }
+              if (data.task.status === 'completed' || data.task.status === 'failed' || data.task.status === 'cancelled') {
+                pollActiveRef.current = false;
+                convDispatch({ type: 'SET_EXEC_STATE', payload: data.task.status === 'completed' ? 'completed' : 'failed' });
+                return;
+              }
+              for (const r of (data.agent_results || [])) {
+                convDispatch({ type: 'UPDATE_AGENT', payload: { id: r.subtask_id, data: { state: r.state as 'pending' | 'running' | 'completed' | 'failed', output: r.output, error: r.error } } });
+              }
+            } catch { pollActiveRef.current = false; }
+            if (pollActiveRef.current) pollTimerRef.current = window.setTimeout(poll, 2000);
+          };
+          pollTimerRef.current = window.setTimeout(poll, 2000);
+          uiDispatch({ type: 'ADD_TOAST', payload: '⚠ Polling for updates...' });
+        }
       } else {
         uiDispatch({ type: 'SET_CONNECTED', payload: false });
         convDispatch({ type: 'SET_EXEC_STATE', payload: 'failed' });

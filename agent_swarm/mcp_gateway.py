@@ -384,7 +384,9 @@ class MCPGateway:
         if ws and not path.startswith("/"):
             path = _os.path.join(ws, path)
         try:
-            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+            parent_dir = os.path.dirname(path)
+            if parent_dir:
+                os.makedirs(parent_dir, exist_ok=True)
             with open(path, "w", encoding=encoding) as f:
                 f.write(content)
             return f"File written: {path} ({len(content)} bytes)"

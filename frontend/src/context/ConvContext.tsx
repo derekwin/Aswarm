@@ -16,7 +16,7 @@ interface ConvState {
   taskId: string | null;
   _fromCache?: boolean;       // restored from localStorage, needs backend sync
   _lastEventId?: number;       // last processed SSE event_id for dedup
-  _completedSet?: string[];    // tracked completed agent IDs for dedup
+  _completedSet?: string[];    // tracked completed agent IDs for dedup (array for JSON serialization)
 }
 
 function initConvState(): ConvState {
@@ -81,7 +81,7 @@ function transitionState(current: TaskExecState, next: TaskExecState): TaskExecS
 function convReducer(state: ConvState, action: ConvAction): ConvState {
   switch (action.type) {
     case 'RESET':
-      return initConvState();
+      return { ...initConvState(), _completedSet: undefined };
     case 'LOAD':
       return { ...state, messages: action.payload.messages, loading: false };
     case 'SET_LOADING':

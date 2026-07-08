@@ -81,8 +81,12 @@ class StateManager:
         return sorted(files)
 
     def cleanup(self, task_id: str, keep_latest: int = 3):
-        """清理旧 checkpoint，只保留最近 N 个。"""
+        """清理旧 checkpoint，只保留最近 N 个。keep_latest=0 removes all."""
         pattern = os.path.join(self.checkpoint_dir, f"{task_id}_*.json")
         checkpoints = sorted(glob.glob(pattern))
-        for old in checkpoints[:-keep_latest]:
-            os.remove(old)
+        if keep_latest > 0:
+            for old in checkpoints[:-keep_latest]:
+                os.remove(old)
+        else:
+            for old in checkpoints:
+                os.remove(old)

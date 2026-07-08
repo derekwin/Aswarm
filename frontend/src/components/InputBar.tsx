@@ -57,7 +57,6 @@ export default function InputBar({ onSend, onStop }: Props) {
     const q = query.trim();
     if (!q || sending) return;
     setSending(true);
-    setQuery('');
 
     let convId = app.activeConvId;
     if (!convId) {
@@ -74,6 +73,7 @@ export default function InputBar({ onSend, onStop }: Props) {
     if (app.conversations[convId]?.title === t('newTaskDefault')) {
       appDispatch({ type: 'SET_TITLE', payload: { id: convId, title: q.slice(0, 40) } });
     }
+    setQuery('');
     onSend(convId, q);
     setSending(false);
   };

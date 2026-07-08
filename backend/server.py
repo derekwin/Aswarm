@@ -52,6 +52,19 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="AgentSwarm Dashboard", lifespan=lifespan)
+
+# Global exception handler to avoid leaking internal details
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def global_exception_handler(_request: Request, exc: Exception):
+    logger.exception("Unhandled exception")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "type": type(exc).__name__},
+    )
+
 storage = get_storage()
 
 _DATA_DIR = Path(os.environ.get("AGENTSWARM_DATA_DIR", "data"))
@@ -104,7 +117,7 @@ async def get_settings():
 async def update_settings(data: dict):
     current = await _load_settings()
     for k in _default_settings:
-        if k in data and data[k]:
+        if k in data and data[k] is not None:
             current[k] = data[k]
     await _save_settings(current)
     return current
@@ -572,10 +585,13 @@ async def _execute_task(task_id: str, conv_id: str, query: str, lang: str = "en"
         _push_event(task_id, {"type": "error", "msg": str(e), "code": error_code})
 
     finally:
+        # Keep streams/archive alive for 30s so late-connecting clients can still replay
         await asyncio.sleep(30)
         _streams.pop(task_id, None)
         _cancel_flags.pop(task_id, None)
         _event_ids.pop(task_id, None)
+        _dag_snapshots.pop(task_id, None)
+        _event_archive.pop(task_id, None)
 
 
 async def _execute_rerun(task_id: str, conv_id: str, query: str, subtasks: list, parallel_groups: list):
@@ -669,7 +685,8 @@ async def _periodic_sync(interval_sec: int = 300):
             if WORKSPACE_ROOT.exists():
                 for d in list(WORKSPACE_ROOT.iterdir()):
                     if d.is_dir() and d.name not in db_ids:
-                        shutil.rmtree(d)
+                        # Run blocking removal in a thread to avoid blocking the event loop
+                        await asyncio.to_thread(shutil.rmtree, d)
                         logger.info(f"Cleaned orphan workspace: {d.name}")
         except Exception as e:
             logger.warning(f"Periodic sync failed: {e}")

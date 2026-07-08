@@ -77,7 +77,7 @@ class Storage:
 
         # Migration: add dag_data column (check column exists first)
         cursor = await conn.execute("PRAGMA table_info(tasks)")
-        columns = {row[1] async for row in cursor}
+        columns = {row[1] for row in await cursor.fetchall()}
         if "dag_data" not in columns:
             await conn.execute("ALTER TABLE tasks ADD COLUMN dag_data TEXT")
             await conn.commit()

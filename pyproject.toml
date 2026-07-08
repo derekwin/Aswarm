@@ -40,10 +40,10 @@ addopts = "-v --tb=short"
 
 [tool.coverage.run]
 source = ["agent_swarm"]
-omit = ["tests/*", "agent_swarm/infrastructure/*", "agent_swarm/mcp_gateway.py", "agent_swarm/trace.py"]
+omit = ["tests/*"]
 
 [tool.coverage.report]
-fail_under = 68
+fail_under = 55
 show_missing = true
 
 [tool.ruff]

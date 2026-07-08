@@ -7,12 +7,12 @@ import asyncio
 import logging
 from typing import Any
 
-from openai import AsyncOpenAI
+from openai import APITimeoutError, AsyncOpenAI
 from openai.types.chat import ChatCompletionMessage
 
 logger = logging.getLogger(__name__)
 
-RETRYABLE = (asyncio.TimeoutError, ConnectionError, ConnectionRefusedError, ConnectionResetError)
+RETRYABLE = (APITimeoutError, asyncio.TimeoutError, ConnectionError, ConnectionRefusedError, ConnectionResetError)
 
 
 class LLMClient:

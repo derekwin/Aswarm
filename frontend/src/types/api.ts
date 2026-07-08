@@ -1,5 +1,9 @@
 // Auto-generated from Pydantic models. DO NOT EDIT MANUALLY.
 // Run: python scripts/generate_types.py > frontend/src/types/api.ts
+//
+// NOTE: This file is auto-generated but currently not used by components.
+// The active SSE event types are in types/index.ts (camelCase wire format).
+// Keep these types around for reference until the codebase fully migrates.
 
 export type SubtaskState = 'pending' | 'running' | 'completed' | 'failed';
 

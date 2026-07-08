@@ -19,6 +19,46 @@ from agent_swarm.prompts.decomposer import (
 
 logger = logging.getLogger(__name__)
 
+
+def _tokenize_cjk(text: str) -> list[str]:
+    """Split text into tokens for mixed CJK/Latin text.
+
+    Uses bigram sliding window for CJK characters, whitespace splitting
+    for Latin words, so Chinese divergence detection works correctly.
+    """
+    tokens: list[str] = []
+    buf = ""
+    for ch in text:
+        if ch.isascii() and ch.isalpha():
+            buf += ch
+        else:
+            if buf:
+                tokens.append(buf)
+                buf = ""
+            if not ch.isspace():
+                tokens.append(ch)
+    if buf:
+        tokens.append(buf)
+
+    # Build CJK bigrams from single CJK chars in the token sequence
+    result: list[str] = []
+    cjk_indices: list[int] = []
+    for i, tok in enumerate(tokens):
+        if len(tok) == 1 and ord(tok) > 127:
+            cjk_indices.append(i)
+            result.append(tok)
+        else:
+            result.append(tok)
+
+    # Add bigrams
+    for i in range(len(cjk_indices) - 1):
+        a = cjk_indices[i]
+        b = cjk_indices[i + 1]
+        result.append(tokens[a] + tokens[b])
+
+    return result
+
+
 CLASSIFIER_SYSTEM_PROMPT = """You are a task classifier. Analyze user input and determine the task type.
 
 Type definitions:
@@ -135,7 +175,7 @@ class MetaScheduler:
             return None
         stopwords = {"的", "和", "与", "在", "是", "了", "the", "a", "an", "is", "of", "to", "in", "for", "and", "or", "it", "on", "at", "with", "has", "had", "was", "were", "this", "that", "from"}
         def significant_words(text: str) -> set[str]:
-            words = text.lower().split()
+            words = _tokenize_cjk(text.lower())
             return {w for w in words if len(w) > 2 and w not in stopwords}
 
         context_words = significant_words(self._project_context)
@@ -161,11 +201,15 @@ class MetaScheduler:
             )
         return DivergenceWarning(diverged=False)
 
-    async def classify_intent(self, query: str) -> str:
-        """Use a lightweight LLM call to classify the task intent."""
+    async def classify_intent(self, query: str, model: str | None = None) -> str:
+        """Use a lightweight LLM call to classify the task intent.
+
+        Uses a small model by default; falls back to decomposer_model if none specified.
+        """
+        model = model or "qwen3:3b"
         try:
             msg = await self.llm.chat(
-                self.decomposer_model,
+                model,
                 [
                     {"role": "system", "content": CLASSIFIER_SYSTEM_PROMPT},
                     {"role": "user", "content": f"Classify the following task:\n\n{query}"},
