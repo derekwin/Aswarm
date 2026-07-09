@@ -9,7 +9,7 @@ import uuid as _uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -55,8 +55,36 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="AgentSwarm Dashboard", lifespan=lifespan)
 
+# ── Rate limiter ──
+
+RATE_LIMIT_WINDOW = 60  # seconds
+RATE_LIMIT_MAX = 30      # requests per window per IP
+_rate_limit_buckets: dict[str, list[float]] = {}
+
+import time as _time
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    # Skip static assets and health checks
+    path = request.url.path
+    if path.startswith("/assets") or path.startswith("/static") or path == "/api/health":
+        return await call_next(request)
+
+    client = request.client.host if request.client else "unknown"
+    now = _time.time()
+    bucket = _rate_limit_buckets.setdefault(client, [])
+    bucket[:] = [t for t in bucket if now - t < RATE_LIMIT_WINDOW]
+
+    if len(bucket) >= RATE_LIMIT_MAX:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Too many requests", "retry_after": RATE_LIMIT_WINDOW},
+            headers={"Retry-After": str(RATE_LIMIT_WINDOW)},
+        )
+    bucket.append(now)
+    return await call_next(request)
+
 # Global exception handler to avoid leaking internal details
-from fastapi import Request
 from fastapi.responses import JSONResponse
 
 @app.exception_handler(Exception)
@@ -164,12 +192,15 @@ async def get_latest_task(conv_id: str):
     return {"task": task, "agent_results": results}
 
 
+MAX_MESSAGES = 500
+
 @app.get("/api/conversations/{conv_id}")
 async def get_conversation(conv_id: str):
     conv = await storage.get_conversation(conv_id)
     if not conv:
         raise HTTPException(404, "Conversation not found")
-    conv["messages"] = await storage.get_messages(conv_id)
+    messages = await storage.get_messages(conv_id)
+    conv["messages"] = messages[-MAX_MESSAGES:]
     return conv
 
 
@@ -290,6 +321,12 @@ async def run_task(query: str = Query(...), conv_id: str = Query(default=""), la
         conv_id = f"conv_{_uuid.uuid4().hex[:12]}"
         await storage.create_conversation(conv_id, "New Task")
         (WORKSPACE_ROOT / conv_id).mkdir(parents=True, exist_ok=True)
+
+    # Idempotency: if a running task exists for this conv, return it
+    if conv_id:
+        existing = await storage.get_latest_task(conv_id)
+        if existing and existing["status"] == "running":
+            return {"task_id": existing["id"], "conv_id": conv_id, "existing": True}
 
     task_id = f"task_{_uuid.uuid4().hex[:12]}"
     await storage.create_task(task_id, conv_id, query)

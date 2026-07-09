@@ -15,6 +15,12 @@ from agent_swarm.models import (
 )
 from agent_swarm.orchestrator import ResultAggregator, SwarmOrchestrator
 from agent_swarm.state_manager import StateManager
+from agent_swarm.exceptions import (
+    AgentSwarmError,
+    AgentTimeoutError,
+    DecompositionError,
+    ToolExecutionError,
+)
 
 __version__ = "0.1.0"
 __all__ = [
@@ -37,4 +43,9 @@ __all__ = [
     "SubtaskState",
     "SubtaskResult",
     "DivergenceWarning",
+    # Exceptions
+    "AgentSwarmError",
+    "AgentTimeoutError",
+    "DecompositionError",
+    "ToolExecutionError",
 ]
