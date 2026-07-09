@@ -2,6 +2,16 @@ import { useConv } from '@/context/ConvContext';
 import { useUI } from '@/context/UIContext';
 import { useT } from '@/hooks/useT';
 
+function SkeletonRow() {
+  return (
+    <div className="flex items-center gap-2 w-full py-1.5 px-2 animate-shimmer">
+      <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-bg-surface" />
+      <span className="h-3 rounded bg-bg-surface flex-1" />
+      <span className="h-3 w-12 rounded bg-bg-surface shrink-0" />
+    </div>
+  );
+}
+
 export default function AgentStatusList() {
   const { state: conv } = useConv();
   const { state: ui, dispatch: uiDispatch } = useUI();
@@ -9,6 +19,25 @@ export default function AgentStatusList() {
 
   const agents = Object.values(conv.agents);
   const hasValidAgents = agents.some(a => a.name && a.name !== '');
+  const isDecomposing = conv.execState === 'decomposing';
+
+  if (isDecomposing && !hasValidAgents) {
+    return (
+      <div className="mt-2 border-t border-border-subtle pt-2 animate-fade-up">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+          <span className="text-[11px] font-semibold text-accent flex-1">{t('decomposing')}</span>
+          <span className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+        </div>
+        <div className="rounded-lg border border-border-subtle bg-bg-base/50 overflow-hidden">
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
+        </div>
+      </div>
+    );
+  }
+
   if (agents.length === 0 || !hasValidAgents) return null;
 
   const completed = agents.filter(a => a.state === 'completed' || a.state === 'failed').length;

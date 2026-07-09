@@ -64,11 +64,14 @@ export default function AgentDetailPanel() {
           )}
 
           {agentActivity.length > 0 ? (
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               {agentActivity.map((act, i) => (
-                <div key={i} className="py-1.5 px-2 rounded bg-bg-base text-xs flex gap-2">
-                  <span className="text-accent font-mono shrink-0">{act.tool}</span>
-                  <span className="text-text-muted truncate">{act.args.slice(0, 100)}</span>
+                <div key={i} className="p-2 rounded bg-bg-base border border-border-subtle text-xs">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-accent font-mono font-semibold">{act.tool}</span>
+                    <span className="text-text-disabled text-[10px]">{new Date(act.time).toLocaleTimeString()}</span>
+                  </div>
+                  <pre className="text-text-muted whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed">{act.args}</pre>
                 </div>
               ))}
             </div>
