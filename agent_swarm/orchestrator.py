@@ -464,7 +464,7 @@ class SwarmOrchestrator:
                           output=result.output, error=result.error, retry_count=result.retry_count)
                 return result
             except BudgetExceededError:
-                compressed = self._compress_context(messages)
+                compressed = await self._compress_context(messages)
                 if compressed is not messages:
                     logger.info(f"  [{agent.name}] Budget exceeded, context compressed: {len(messages)} → {len(compressed)} messages")
                     messages = compressed
@@ -511,28 +511,56 @@ class SwarmOrchestrator:
                   output=result.output, error=result.error, retry_count=result.retry_count)
         return result
 
-    def _compress_context(self, messages: list[dict]) -> list[dict]:
-        """Compress conversation history when budget is exceeded.
+    async def _compress_context(self, messages: list[dict]) -> list[dict]:
+        """Compress conversation history using LLM summarization when budget is exceeded.
 
-        Strategy: keep system prompt + last 4 messages, summarize the middle
-        into a single system message. Returns original if nothing to compress.
+        Progressive strategy:
+        1. Messages ≤ 8 → nothing worth compressing
+        2. Keep system prompt + last 4 messages, summarize the rest with a cheap LLM
+        3. The summary captures: completed actions, key findings, current state, next steps
         """
-        if len(messages) <= 6:
-            return messages  # nothing worth compressing
+        if len(messages) <= 8:
+            return messages
 
         KEEP_TAIL = 4
         system_msg = messages[0]
-        middle = messages[1:-KEEP_TAIL]
+        to_summarize = messages[1:-KEEP_TAIL]
         tail = messages[-KEEP_TAIL:]
 
-        summary = "\n".join(
-            f"[{m.get('role', '?')}] {str(m.get('content', ''))[:200]}"
-            for m in middle[-10:]  # summarize last 10 of the middle
+        history_text = "\n".join(
+            f"[{m.get('role', '?')}] {str(m.get('content', ''))[:300]}"
+            for m in to_summarize
         )
+
+        try:
+            summary = await self._call_llm(
+                model=self.JUDGE_MODEL,
+                messages=[{
+                    "role": "system",
+                    "content": (
+                        "You are a context summarizer. Given conversation history between an AI agent "
+                        "and its tools/environment, produce a concise structured summary.\n\n"
+                        "Output format:\n"
+                        "## Actions Taken\n- what the agent did\n\n"
+                        "## Key Findings\n- important results or data found\n\n"
+                        "## Current State\n- where the agent is now\n\n"
+                        "## Next Steps\n- what remains to be done"
+                    ),
+                }, {
+                    "role": "user",
+                    "content": f"Summarize this conversation:\n\n{history_text}",
+                }],
+                temperature=0.1,
+            )
+        except Exception:
+            summary = "\n".join(
+                f"- [{m.get('role', '?')}] {str(m.get('content', ''))[:150]}"
+                for m in to_summarize[-6:]
+            )
 
         return [
             system_msg,
-            {"role": "system", "content": f"[Context Summary]\nEarlier conversation has been summarized:\n{summary}\n\nContinue from the latest context below."},
+            {"role": "system", "content": f"[Context Compressed]\n{summary}\n\nContinue from the latest context below."},
             *tail,
         ]
 
