@@ -27,6 +27,7 @@ from agent_swarm.infrastructure.tool_registry import ToolRegistry
 from agent_swarm.trace import trace
 
 from .storage import close_storage, get_storage
+from .task_executor import execute_task, execute_resume, execute_rerun
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -429,103 +430,9 @@ async def resume_from_checkpoint(task_id: str, checkpoint_path: str = Query(defa
 
 async def _execute_resume(new_task_id: str, original_task_id: str, checkpoint_path: str | None):
     """Execute a task resumed from a checkpoint."""
-    try:
-        settings = await _load_settings()
-        tools = ToolRegistry()
-        llm = LLMClient(base_url=settings["llm_base_url"], api_key=settings["llm_api_key"])
-        factory = AgentFactory(available_tools=set(tools.available_tools()), default_model=settings["default_model"])
-        state_manager = StateManager(
-            checkpoint_dir=os.environ.get("AGENTSWARM_CHECKPOINT_DIR", "./checkpoints"),
-        )
-        budget = BudgetTracker(token_limit=int(settings.get("budget_token_limit", 200000)))
-        llm.set_budget(budget)
-
-        state = await asyncio.to_thread(state_manager.resume, original_task_id, checkpoint_path)
-        dag = state.dag
-
-        async def resume_on_event(event_type: str, data: dict):
-            match event_type:
-                case "agent_start":
-                    _push_event(new_task_id, {
-                        "type": "agent_start", "subtask_id": data["subtask_id"],
-                        "agent_name": data["agent_name"], "role": data.get("role", ""),
-                    })
-                case "agent_done":
-                    await storage.add_agent_result(
-                        new_task_id, data["subtask_id"], data.get("agent_name", ""),
-                        data["state"], data.get("output"), data.get("error"), data.get("retry_count", 0),
-                    )
-                    _push_event(new_task_id, {
-                        "type": "agent_done", "subtask_id": data["subtask_id"],
-                        "state": data["state"], "output": data.get("output", ""),
-                        "error": data.get("error"), "retry_count": data.get("retry_count", 0),
-                    })
-                case "tool_call":
-                    arg_preview = json.dumps(data.get("args", {}), ensure_ascii=False)[:200]
-                    _push_event(new_task_id, {
-                        "type": "tool_call", "agent_name": data["agent_name"],
-                        "tool": data["tool"], "args": arg_preview,
-                    })
-                case "approval_request":
-                    _push_event(new_task_id, {
-                        "type": "approval_request",
-                        "subtask_id": data["subtask_id"],
-                        "agent_name": data["agent_name"],
-                        "action": data.get("action", ""),
-                        "reasoning": data.get("reasoning", ""),
-                        "risk_level": data.get("risk_level", "medium"),
-                    })
-
-        async def resume_wait_for_approval() -> dict | None:
-            evt = asyncio.Event()
-            _approval_events[new_task_id] = evt
-            try:
-                while not evt.is_set():
-                    if _cancel_flags.get(new_task_id):
-                        return None
-                    try:
-                        await asyncio.wait_for(evt.wait(), timeout=300)
-                    except asyncio.TimeoutError:
-                        return {"approved": False, "feedback": "Approval timed out", "subtask_id": ""}
-            finally:
-                _approval_events.pop(new_task_id, None)
-            return _approval_decisions.pop(new_task_id, None)
-
-        orchestrator = SwarmOrchestrator(
-            tools=tools, llm=llm, factory=factory, state_manager=state_manager,
-            max_subtask_retries=2,
-            on_event=resume_on_event,
-            is_cancelled=lambda: _cancel_flags.get(new_task_id, False),
-            wait_for_approval=resume_wait_for_approval,
-        )
-
-        subtask_info = [
-            {"id": s.id, "name": s.agent_config.name, "role": s.agent_config.role,
-             "tools": s.agent_config.tools, "depends_on": s.depends_on}
-            for s in dag.subtasks
-        ]
-        _push_event(new_task_id, {
-            "type": "dag", "intent": dag.intent,
-            "subtasks": subtask_info, "parallel_groups": dag.parallel_groups,
-        })
-        manager.store_dag_snapshot(new_task_id, {"type": "dag", "task_id": new_task_id, "intent": dag.intent, "subtasks": subtask_info, "parallel_groups": dag.parallel_groups})
-        _push_event(new_task_id, {"type": "exec_state", "state": "streaming"})
-
-        state = await orchestrator._execute_from_state(state)
-        results = [{"id": r.subtask_id, "state": r.state.value, "output": r.output, "error": r.error}
-                   for r in state.subtask_results.values()]
-        summary = orchestrator.aggregator.aggregate(list(state.subtask_results.values()))
-        task = await storage.get_task(original_task_id)
-        if task:
-            await storage.add_message(task["conversation_id"], "assistant", summary)
-        _push_event(new_task_id, {"type": "done", "summary": summary, "results": results})
-
-    except Exception as e:
-        _push_event(new_task_id, {"type": "error", "msg": str(e), "code": _classify_error(e)})
-    finally:
-        await asyncio.sleep(30)
-        manager.cleanup(new_task_id)
-        _cancel_flags.pop(new_task_id, None)
+    await execute_resume(new_task_id, original_task_id, checkpoint_path,
+        _load_settings=_load_settings, _push_event=_push_event, storage=storage, manager=manager,
+        _cancel_flags=_cancel_flags, _approval_events=_approval_events, _approval_decisions=_approval_decisions)
 
 
 # ── Rerun API ──
@@ -579,243 +486,23 @@ async def rerun_subtask(task_id: str, subtask_id: str, prompt: str = Query(defau
 # ── Task Execution ──
 
 async def _execute_task(task_id: str, conv_id: str, query: str, lang: str = "en"):
-    try:
-        settings = await _load_settings()
-        ws = WORKSPACE_ROOT / conv_id
-        os.environ["AGENTSWARM_WORKSPACE"] = str(ws)
-
-        tools = ToolRegistry()
-        llm = LLMClient(base_url=settings["llm_base_url"], api_key=settings["llm_api_key"])
-        factory = AgentFactory(available_tools=set(tools.available_tools()), default_model=settings["default_model"])
-        state_manager = StateManager(
-            checkpoint_dir=os.environ.get("AGENTSWARM_CHECKPOINT_DIR", "./checkpoints"),
-        )
-
-        # Budget tracking
-        budget = BudgetTracker(token_limit=int(settings.get("budget_token_limit", 200000)))
-        llm.set_budget(budget)
-
-        scheduler = MetaScheduler(
-            llm=llm,
-            decomposer_model=settings["decomposer_model"],
-            available_tools=list(tools.available_tools()),
-        )
-
-        role_verb = {"web_searcher": "searching", "data_analyst": "analyzing", "coder": "coding", "writer": "writing", "reviewer": "reviewing"}
-
-        async def on_orchestrator_event(event_type: str, data: dict):
-            match event_type:
-                case "agent_start":
-                    trace.record("agent_start", task_id, subtask_id=data["subtask_id"], agent_name=data["agent_name"])
-                    _push_event(task_id, {
-                        "type": "agent_start", "subtask_id": data["subtask_id"],
-                        "agent_name": data["agent_name"], "role": data.get("role", ""),
-                    })
-                    # Don't emit redundant status messages — agent card dots show execution progress
-                case "agent_done":
-                    trace.record("agent_done", task_id, subtask_id=data["subtask_id"], agent_name=data.get("agent_name", ""),
-                                 data={"state": data["state"], "iterations": 0, "retries": data.get("retry_count", 0)})
-                    await storage.add_agent_result(
-                        task_id, data["subtask_id"], data.get("agent_name", ""),
-                        data["state"], data.get("output"), data.get("error"), data.get("retry_count", 0),
-                    )
-                    _push_event(task_id, {
-                        "type": "agent_done", "subtask_id": data["subtask_id"],
-                        "state": data["state"], "output": data.get("output", ""),
-                        "error": data.get("error"), "retry_count": data.get("retry_count", 0),
-                    })
-                    total = len(dag.subtasks)
-                    results = await storage.get_agent_results(task_id)
-                    done_count = sum(1 for r in results if r["state"] in ("completed", "failed"))
-                    if total > 0:
-                        _push_event(task_id, {"type": "progress", "completed": done_count, "total": total})
-                case "tool_call":
-                    trace.record("tool_call", task_id, agent_name=data["agent_name"], data={"tool": data["tool"]})
-                    arg_preview = json.dumps(data.get("args", {}), ensure_ascii=False)[:200]
-                    _push_event(task_id, {
-                        "type": "tool_call", "agent_name": data["agent_name"],
-                        "tool": data["tool"], "args": arg_preview,
-                    })
-                case "approval_request":
-                    # HITL: agent needs user approval
-                    _push_event(task_id, {
-                        "type": "approval_request",
-                        "subtask_id": data["subtask_id"],
-                        "agent_name": data["agent_name"],
-                        "action": data.get("action", ""),
-                        "reasoning": data.get("reasoning", ""),
-                        "risk_level": data.get("risk_level", "medium"),
-                    })
-
-        async def wait_for_approval() -> dict | None:
-            """Block until user approves/rejects, or task cancelled. Returns decision dict or None."""
-            evt = asyncio.Event()
-            _approval_events[task_id] = evt
-            try:
-                while not evt.is_set():
-                    if _cancel_flags.get(task_id):
-                        return None
-                    try:
-                        await asyncio.wait_for(evt.wait(), timeout=300)  # 5 min timeout
-                    except asyncio.TimeoutError:
-                        return {"approved": False, "feedback": "Approval timed out", "subtask_id": ""}
-            finally:
-                _approval_events.pop(task_id, None)
-            return _approval_decisions.pop(task_id, None)
-
-        orchestrator = SwarmOrchestrator(
-            tools=tools, llm=llm, factory=factory, state_manager=state_manager,
-            max_subtask_retries=2,
-            on_event=on_orchestrator_event,
-            is_cancelled=lambda: _cancel_flags.get(task_id, False),
-            wait_for_approval=wait_for_approval,
-        )
-
-        _push_event(task_id, {"type": "status", "msg": "Decomposing task..."})
-        _push_event(task_id, {"type": "exec_state", "state": "decomposing"})
-        dag: TaskDAG = await scheduler.decompose(query, lang=lang)
-
-        trace.record("dag_generated", task_id, data={"subtasks": len(dag.subtasks), "groups": len(dag.parallel_groups)})
-        await storage.update_task(task_id, "running", dag.intent, len(dag.subtasks))
-        await storage.update_conversation_title(conv_id, query[:40])
-
-        subtask_info = [
-            {"id": s.id, "name": s.agent_config.name, "role": s.agent_config.role,
-             "tools": s.agent_config.tools, "depends_on": s.depends_on}
-            for s in dag.subtasks
-        ]
-        _push_event(task_id, {
-            "type": "dag", "intent": dag.intent,
-            "subtasks": subtask_info, "parallel_groups": dag.parallel_groups,
-        })
-        manager.store_dag_snapshot(task_id, {"type": "dag", "task_id": task_id, "intent": dag.intent, "subtasks": subtask_info, "parallel_groups": dag.parallel_groups})
-        await storage.store_dag_data(task_id, json.dumps({"intent": dag.intent, "subtasks": subtask_info, "parallel_groups": dag.parallel_groups}))
-        _push_event(task_id, {"type": "status", "msg": "Agents starting..."})
-        _push_event(task_id, {"type": "exec_state", "state": "streaming"})
-
-        state: SwarmState = await orchestrator.execute(dag)
-
-        results = [
-            {"id": r.subtask_id, "state": r.state.value,
-             "output": r.output, "error": r.error}
-            for r in state.subtask_results.values()
-        ]
-
-        summary = orchestrator.aggregator.aggregate(list(state.subtask_results.values()))
-        await storage.update_task(task_id, "completed")
-        await storage.add_message(conv_id, "assistant", summary)
-
-        _push_event(task_id, {
-            "type": "done", "summary": summary, "results": results,
-        })
-        # Emit budget summary
-        budget_summary = budget.summary()
-        if budget_summary["total_tokens"] > 0:
-            _push_event(task_id, {"type": "status", "msg": f"Budget: {budget_summary['total_tokens']:,}/{budget_summary['token_limit']:,} tokens ({budget_summary['usage_pct']}%), est. ${budget_summary['estimated_cost']:.2f}"})
-        trace.record("task_complete", task_id, data={"results": len(results)})
-        trace.flush(task_id)
-
-    except BudgetExceededError as e:
-        await storage.update_task(task_id, "failed")
-        _push_event(task_id, {"type": "error", "msg": str(e), "code": "BUDGET_EXCEEDED"})
-    except Exception as e:
-        error_code = _classify_error(e)
-        logger.exception(f"Task {task_id} failed")
-        trace.record("task_error", task_id, data={"error": str(e), "code": error_code})
-        trace.flush(task_id)
-        await storage.update_task(task_id, "failed")
-        _push_event(task_id, {"type": "error", "msg": str(e), "code": error_code})
-
-    finally:
-        # Keep streams/archive alive for 30s so late-connecting clients can still replay
-        await asyncio.sleep(30)
-        manager.cleanup(task_id)
-        _cancel_flags.pop(task_id, None)
+    await execute_task(task_id, conv_id, query, lang,
+        _load_settings=_load_settings, _push_event=_push_event, storage=storage, manager=manager,
+        _cancel_flags=_cancel_flags, _approval_events=_approval_events, _approval_decisions=_approval_decisions,
+        WORKSPACE_ROOT=WORKSPACE_ROOT)
 
 
 async def _execute_rerun(task_id: str, conv_id: str, query: str, subtasks: list, parallel_groups: list):
     """Execute a partial rerun of specific subtasks from a DAG."""
-    from agent_swarm.models import AgentConfig, Subtask, TaskDAG
-
-    try:
-        settings = await _load_settings()
-        tools = ToolRegistry()
-        llm = LLMClient(base_url=settings["llm_base_url"], api_key=settings["llm_api_key"])
-        factory = AgentFactory(available_tools=set(tools.available_tools()), default_model=settings["default_model"])
-        state_manager = StateManager(
-            checkpoint_dir=os.environ.get("AGENTSWARM_CHECKPOINT_DIR", "./checkpoints"),
-        )
-
-        subtask_models = []
-        all_ids = {s["id"] for s in subtasks}
-        for s in subtasks:
-            cfg = AgentConfig(
-                name=s.get("name", s["id"]), role=s.get("role", "rerun"),
-                system_prompt=s.get("system_prompt", "Rerun agent"), tools=s.get("tools", []),
-            )
-            deps = [d for d in s.get("depends_on", []) if d in all_ids]
-            subtask_models.append(Subtask(id=s["id"], agent_config=cfg, prompt=s.get("prompt", ""), depends_on=deps))
-
-        dag = TaskDAG(
-            task_id=task_id, original_query=query, intent="rerun",
-            subtasks=subtask_models, parallel_groups=[
-                [tid for tid in g if tid in all_ids] for g in parallel_groups
-            ],
-        )
-        dag.parallel_groups = [g for g in dag.parallel_groups if g]
-
-        orchestrator = SwarmOrchestrator(
-            tools=tools, llm=llm, factory=factory, state_manager=state_manager,
-            max_subtask_retries=1,
-        )
-
-        subtask_info = [
-            {"id": s.id, "name": s.agent_config.name, "role": s.agent_config.role,
-             "tools": s.agent_config.tools, "depends_on": s.depends_on}
-            for s in dag.subtasks
-        ]
-        _push_event(task_id, {
-            "type": "dag", "intent": "rerun",
-            "subtasks": subtask_info, "parallel_groups": dag.parallel_groups,
-        })
-        manager.store_dag_snapshot(task_id, {"type": "dag", "task_id": task_id, "intent": "rerun", "subtasks": subtask_info, "parallel_groups": dag.parallel_groups})
-
-        state = await orchestrator.execute(dag)
-        results = [{"id": r.subtask_id, "state": r.state.value, "output": r.output, "error": r.error}
-                   for r in state.subtask_results.values()]
-        summary = orchestrator.aggregator.aggregate(list(state.subtask_results.values()))
-        await storage.add_message(conv_id, "assistant", summary)
-        _push_event(task_id, {"type": "done", "summary": summary, "results": results})
-
-    except Exception as e:
-        _push_event(task_id, {"type": "error", "msg": str(e), "code": _classify_error(e)})
-    finally:
-        await asyncio.sleep(30)
-        manager.cleanup(task_id)
-        _cancel_flags.pop(task_id, None)
-
-
-def _classify_error(e: Exception) -> str:
-    msg = str(e).lower()
-    if "budget" in msg and ("exceeded" in msg or "exhausted" in msg):
-        return "BUDGET_EXCEEDED"
-    if "timeout" in msg or "timed out" in msg:
-        return "TIMEOUT"
-    if "connection" in msg or "refused" in msg or "reset" in msg:
-        return "CONNECTION_ERROR"
-    if "api key" in msg or "unauthorized" in msg or "auth" in msg:
-        return "AUTH_ERROR"
-    if "rate" in msg or "quota" in msg or "limit" in msg:
-        return "RATE_LIMIT"
-    if "parse" in msg or "json" in msg:
-        return "PARSE_ERROR"
-    return "INTERNAL_ERROR"
+    await execute_rerun(task_id, conv_id, query, subtasks, parallel_groups,
+        _load_settings=_load_settings, _push_event=_push_event, storage=storage, manager=manager,
+        _cancel_flags=_cancel_flags)
 
 
 # ── Periodic Sync ──
 
 async def _periodic_sync(interval_sec: int = 300):
-    """Background task: periodically align workspaces with database."""
+    """Background task: periodically align workspaces with database and clean stale state."""
     while True:
         await asyncio.sleep(interval_sec)
         try:
@@ -826,9 +513,16 @@ async def _periodic_sync(interval_sec: int = 300):
             if WORKSPACE_ROOT.exists():
                 for d in list(WORKSPACE_ROOT.iterdir()):
                     if d.is_dir() and d.name not in db_ids:
-                        # Run blocking removal in a thread to avoid blocking the event loop
                         await asyncio.to_thread(shutil.rmtree, d)
                         logger.info(f"Cleaned orphan workspace: {d.name}")
+
+            # Clean stale cancel flags for completed/failed/cancelled tasks
+            for task_id in list(_cancel_flags.keys()):
+                task = await storage.get_task(task_id)
+                if not task or task["status"] in ("completed", "failed", "cancelled"):
+                    _cancel_flags.pop(task_id, None)
+                    _approval_events.pop(task_id, None)
+                    _approval_decisions.pop(task_id, None)
         except Exception as e:
             logger.warning(f"Periodic sync failed: {e}")
 
