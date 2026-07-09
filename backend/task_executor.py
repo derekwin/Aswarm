@@ -148,9 +148,6 @@ async def execute_task(
         await storage.add_message(conv_id, "assistant", summary)
 
         _push_event(task_id, {"type": "done", "summary": summary, "results": results})
-        budget_summary = budget.summary()
-        if budget_summary["total_tokens"] > 0:
-            _push_event(task_id, {"type": "status", "msg": f"Budget: {budget_summary['total_tokens']:,}/{budget_summary['token_limit']:,} tokens ({budget_summary['usage_pct']}%), est. ${budget_summary['estimated_cost']:.2f}"})
         trace.record("task_complete", task_id, data={"results": len(results)})
         trace.flush(task_id)
 
