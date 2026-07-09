@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, type ReactNode, type Dispatch, useRef } from 'react';
+import { createContext, useContext, useReducer, type ReactNode, type Dispatch } from 'react';
 import type { Message, AgentState, DAGData, ActivityEntry, TaskExecState } from '@/types';
 
 interface ConvState {
@@ -169,10 +169,6 @@ export function useConv(): ConvContextValue {
 
 export function ConvProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(convReducer, null, initConvState);
-  const stateRef = useRef(state);
-  stateRef.current = state;
-  // Expose state via ref so useTaskRunner can read it without stale closures
-  (ConvContext as any)._stateRef = stateRef;
   return (
     <ConvContext.Provider value={{ state, dispatch }}>
       {children}

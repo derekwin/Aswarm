@@ -4,7 +4,7 @@ import { useUI } from '@/context/UIContext';
 import { useT } from '@/hooks/useT';
 import { useWebSocket } from '@/context/WebSocketContext';
 import { api } from '@/api';
-import type { SSEEvent, ErrorCode } from '@/types';
+import type { WSEvent, ErrorCode } from '@/types';
 import { ERROR_SUGGESTIONS } from '@/types';
 import { useMockRunner } from '@/hooks/useMockRunner';
 
@@ -33,7 +33,7 @@ export function useTaskRunner() {
   const startTimeRef = useRef<Record<string, number>>({});
 
   const handleWSEvent = useCallback((raw: Record<string, unknown>) => {
-    const d = raw as SSEEvent;
+    const d = raw as WSEvent;
     switch (d.type) {
       case 'catchup_done':
         break;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { SSEEvent } from '@/types';
+import type { WSEvent } from '@/types';
 
 interface AgentRec {
   name: string; role: string; state: string; retryCount: number;
@@ -21,7 +21,7 @@ function fresh(): SimState {
     execState: 'idle', progress: null, error: null, errorCode: null };
 }
 
-function handleEvent(state: SimState, event: SSEEvent, calls: string[]): SimState {
+function handleEvent(state: SimState, event: WSEvent, calls: string[]): SimState {
   switch (event.type) {
     case 'status':
       calls.push('UPDATE_LAST_MSG');
@@ -77,26 +77,26 @@ describe('SSE Event Handler — full flow', () => {
     const calls: string[] = [];
     let s = fresh();
 
-    s = handleEvent(s, { type: 'exec_state', state: 'decomposing' }, calls);
+    s = handleEvent(s, { type: 'exec_state', task_id: 't1', state: 'decomposing', event_id: 1 }, calls);
     expect(s.execState).toBe('decomposing');
 
-    s = handleEvent(s, { type: 'dag', intent: 'research',
+    s = handleEvent(s, { type: 'dag', task_id: 't1', intent: 'research',
       subtasks: [{ id: 't1', name: 'a', role: 'coder', tools: [], depends_on: [] }],
-      parallel_groups: [['t1']] }, calls);
+      parallel_groups: [['t1']], event_id: 2 }, calls);
     expect(s.execState).toBe('streaming');
     expect(s.totalAgents).toBe(1);
 
-    s = handleEvent(s, { type: 'agent_start', subtask_id: 't1', agent_name: 'a', role: 'coder' }, calls);
+    s = handleEvent(s, { type: 'agent_start', task_id: 't1', subtask_id: 't1', agent_name: 'a', role: 'coder', event_id: 3 }, calls);
     expect(s.agents['t1'].state).toBe('running');
 
-    s = handleEvent(s, { type: 'agent_done', subtask_id: 't1', state: 'completed', output: 'ok', retry_count: 0 }, calls);
+    s = handleEvent(s, { type: 'agent_done', task_id: 't1', subtask_id: 't1', state: 'completed', output: 'ok', retry_count: 0, event_id: 4 }, calls);
     expect(s.agents['t1'].state).toBe('completed');
     expect(s.completedAgents).toBe(1);
 
-    s = handleEvent(s, { type: 'progress', completed: 1, total: 1 }, calls);
+    s = handleEvent(s, { type: 'progress', task_id: 't1', completed: 1, total: 1, event_id: 5 }, calls);
     expect(s.progress?.completed).toBe(1);
 
-    s = handleEvent(s, { type: 'done' }, calls);
+    s = handleEvent(s, { type: 'done', task_id: 't1', event_id: 6 }, calls);
     expect(s.execState).toBe('completed');
 
     expect(calls).toContain('SET_DAG');
@@ -109,7 +109,7 @@ describe('SSE Event Handler — full flow', () => {
     const calls: string[] = [];
     let s = fresh();
     s.execState = 'streaming';
-    s = handleEvent(s, { type: 'error', msg: 'timeout', code: 'TIMEOUT' }, calls);
+    s = handleEvent(s, { type: 'error', task_id: 't1', msg: 'timeout', code: 'TIMEOUT', event_id: 1 }, calls);
     expect(s.execState).toBe('failed');
     expect(s.error).toBe('timeout');
     expect(s.errorCode).toBe('TIMEOUT');
@@ -119,7 +119,7 @@ describe('SSE Event Handler — full flow', () => {
     const calls: string[] = [];
     let s = fresh();
     s.agents['t1'] = { name: 'a', role: 'r', state: 'running', retryCount: 0 };
-    s = handleEvent(s, { type: 'agent_done', subtask_id: 't1', state: 'failed', error: 'err', retry_count: 0 }, calls);
+    s = handleEvent(s, { type: 'agent_done', task_id: 't1', subtask_id: 't1', state: 'failed', error: 'err', retry_count: 0, event_id: 1 }, calls);
     expect(s.agents['t1'].state).toBe('failed');
     expect(s.completedAgents).toBe(1);
   });
@@ -127,19 +127,19 @@ describe('SSE Event Handler — full flow', () => {
   it('tool_call dispatches correctly', () => {
     const calls: string[] = [];
     const s = fresh();
-    handleEvent(s, { type: 'tool_call', agent_name: 'searcher', tool: 'search_engine', args: '{}' }, calls);
+    handleEvent(s, { type: 'tool_call', task_id: 't1', agent_name: 'searcher', tool: 'search_engine', args: '{}', event_id: 1 }, calls);
     expect(calls).toContain('SET_TOOL_CALL');
   });
 
   it('parallel agents start and finish correctly', () => {
     const calls: string[] = [];
     let s = fresh();
-    s = handleEvent(s, { type: 'agent_start', subtask_id: 't1', agent_name: 'a1', role: 'coder' }, calls);
-    s = handleEvent(s, { type: 'agent_start', subtask_id: 't2', agent_name: 'a2', role: 'writer' }, calls);
+    s = handleEvent(s, { type: 'agent_start', task_id: 't1', subtask_id: 't1', agent_name: 'a1', role: 'coder', event_id: 1 }, calls);
+    s = handleEvent(s, { type: 'agent_start', task_id: 't2', subtask_id: 't2', agent_name: 'a2', role: 'writer', event_id: 2 }, calls);
     expect(s.agents['t1'].state).toBe('running');
     expect(s.agents['t2'].state).toBe('running');
-    s = handleEvent(s, { type: 'agent_done', subtask_id: 't1', state: 'completed', retry_count: 0 }, calls);
-    s = handleEvent(s, { type: 'agent_done', subtask_id: 't2', state: 'completed', retry_count: 0 }, calls);
+    s = handleEvent(s, { type: 'agent_done', task_id: 't1', subtask_id: 't1', state: 'completed', retry_count: 0, event_id: 3 }, calls);
+    s = handleEvent(s, { type: 'agent_done', task_id: 't2', subtask_id: 't2', state: 'completed', retry_count: 0, event_id: 4 }, calls);
     expect(s.completedAgents).toBe(2);
   });
 
@@ -148,7 +148,7 @@ describe('SSE Event Handler — full flow', () => {
     let s = fresh();
     s.agents['old'] = { name: 'old', role: 'r', state: 'completed', retryCount: 0 };
     s.completedAgents = 5;
-    s = handleEvent(s, { type: 'dag', intent: 't', subtasks: [], parallel_groups: [] }, calls);
+    s = handleEvent(s, { type: 'dag', task_id: 't1', intent: 't', subtasks: [], parallel_groups: [], event_id: 1 }, calls);
     expect(s.completedAgents).toBe(0);
     expect(Object.keys(s.agents)).toHaveLength(0);
   });
@@ -156,14 +156,14 @@ describe('SSE Event Handler — full flow', () => {
   it('exec_state transitions state correctly', () => {
     const calls: string[] = [];
     let s = fresh();
-    s = handleEvent(s, { type: 'exec_state', state: 'decomposing' }, calls);
+    s = handleEvent(s, { type: 'exec_state', task_id: 't1', state: 'decomposing', event_id: 1 }, calls);
     expect(s.execState).toBe('decomposing');
     expect(calls).toContain('SET_EXEC_STATE');
 
-    s = handleEvent(s, { type: 'exec_state', state: 'streaming' }, calls);
+    s = handleEvent(s, { type: 'exec_state', task_id: 't1', state: 'streaming', event_id: 2 }, calls);
     expect(s.execState).toBe('streaming');
 
-    s = handleEvent(s, { type: 'exec_state', state: 'completed' }, calls);
+    s = handleEvent(s, { type: 'exec_state', task_id: 't1', state: 'completed', event_id: 3 }, calls);
     expect(s.execState).toBe('completed');
   });
 });

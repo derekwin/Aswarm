@@ -94,25 +94,6 @@ class TestRunEndpointValidation:
         assert "conv_id" in data
 
 
-class TestStreamEndpoint:
-    def test_stream_unknown_task_returns_error(self):
-        """SSE stream for unknown task ID should return error event."""
-        response = client.get("/stream/nonexistent_task_id")
-        assert response.status_code == 200
-        assert "text/event-stream" in response.headers["content-type"]
-
-    def test_stream_real_task(self):
-        """Submit a task then stream should get DAG and done events."""
-        run_resp = client.post("/run?query=Hello+World")
-        assert run_resp.status_code == 200
-        task_id = run_resp.json()["task_id"]
-
-        response = client.get(f"/stream/{task_id}")
-        assert response.status_code == 200
-        content = response.text
-        assert "dag" in content or "error" in content or len(content) > 0
-
-
 class TestCancelEndpoint:
     def test_cancel_unknown_task(self):
         response = client.post("/cancel/nonexistent")
