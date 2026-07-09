@@ -149,7 +149,7 @@ function AppInner() {
       } else if (status === 'running') {
         convDispatch({ type: 'SET_EXEC_STATE', payload: 'reconnecting' });
         registerHandler(taskData.task.id, handleWSEvent);
-        subscribe(taskData.task.id);
+        subscribe(taskData.task.id, taskData.task.conversation_id || '');
       }
       convDispatch({ type: 'SET_LOADING', payload: false });
     });

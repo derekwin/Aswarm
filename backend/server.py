@@ -312,6 +312,10 @@ async def websocket_endpoint(ws: WebSocket):
                     if not task:
                         await ws.send_json({"type": "error", "task_id": task_id, "msg": "Task not found", "code": "NOT_FOUND"})
                         continue
+                    conv_id = msg.get("conv_id", "")
+                    if conv_id and task["conversation_id"] != conv_id:
+                        await ws.send_json({"type": "error", "task_id": task_id, "msg": "Access denied", "code": "FORBIDDEN"})
+                        continue
                     await manager.subscribe(ws, task_id)
                 case "unsubscribe":
                     await manager.unsubscribe(ws, task_id)

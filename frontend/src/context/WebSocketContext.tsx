@@ -4,7 +4,7 @@ type WSEventHandler = (event: Record<string, unknown>) => void;
 
 export interface WebSocketContextValue {
   connected: boolean;
-  subscribe: (taskId: string) => void;
+  subscribe: (taskId: string, convId: string) => void;
   unsubscribe: (taskId: string) => void;
   cancel: (taskId: string) => void;
   registerHandler: (taskId: string, handler: WSEventHandler) => void;
@@ -20,7 +20,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const handlersRef = useRef<Map<string, WSEventHandler>>(new Map());
-  const subscribedRef = useRef<Set<string>>(new Set());
+  const subscribedRef = useRef<Map<string, string>>(new Map()); // task_id → conv_id
   const reconnectAttemptRef = useRef(0);
   const pingTimerRef = useRef<ReturnType<typeof setInterval>>();
   const pongTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -37,8 +37,8 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       setConnected(true);
       reconnectAttemptRef.current = 0;
 
-      for (const taskId of subscribedRef.current) {
-        ws.send(JSON.stringify({ action: 'subscribe', task_id: taskId }));
+      for (const [taskId, convId] of subscribedRef.current) {
+        ws.send(JSON.stringify({ action: 'subscribe', task_id: taskId, conv_id: convId }));
       }
 
       pingTimerRef.current = setInterval(() => {
@@ -95,10 +95,10 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     };
   }, [connect]);
 
-  const subscribe = useCallback((taskId: string) => {
-    subscribedRef.current.add(taskId);
+  const subscribe = useCallback((taskId: string, convId: string) => {
+    subscribedRef.current.set(taskId, convId);
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ action: 'subscribe', task_id: taskId }));
+      wsRef.current.send(JSON.stringify({ action: 'subscribe', task_id: taskId, conv_id: convId }));
     }
   }, []);
 

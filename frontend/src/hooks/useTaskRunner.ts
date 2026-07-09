@@ -187,7 +187,7 @@ export function useTaskRunner() {
         localStorage.setItem(`conv_title:${convId}`, title);
       } catch { /* ignore */ }
       registerHandler(task_id, handleWSEvent);
-      subscribe(task_id);
+      subscribe(task_id, convId);
     } catch {
       uiDispatch({ type: 'SET_CONNECTED', payload: false });
       convDispatch({ type: 'SET_EXEC_STATE', payload: 'failed' });
@@ -221,7 +221,7 @@ export function useTaskRunner() {
 
     convDispatch({ type: 'SET_EXEC_STATE', payload: 'reconnecting' });
     registerHandler(taskId, handleWSEvent);
-    subscribe(taskId);
+    subscribe(taskId, convIdRef.current || '');
   }, [convDispatch, uiDispatch, subscribe, registerHandler, handleWSEvent]);
 
   const cancelTask = useCallback(async (silent = false) => {
