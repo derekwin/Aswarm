@@ -1,4 +1,4 @@
-"""AgentSwarm Web Server — FastAPI + SSE real-time agent dashboard with async SQLite persistence."""
+"""AgentSwarm Web Server — FastAPI + WebSocket real-time agent dashboard with async SQLite persistence."""
 
 import asyncio
 import json
@@ -63,7 +63,7 @@ async def global_exception_handler(_request: Request, exc: Exception):
     logger.exception("Unhandled exception")
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error", "type": type(exc).__name__},
+        content={"detail": "Internal server error"},
     )
 
 storage = get_storage()
@@ -307,6 +307,10 @@ async def websocket_endpoint(ws: WebSocket):
             task_id = msg.get("task_id", "")
             match action:
                 case "subscribe":
+                    task = await storage.get_task(task_id)
+                    if not task:
+                        await ws.send_json({"type": "error", "task_id": task_id, "msg": "Task not found", "code": "NOT_FOUND"})
+                        continue
                     await manager.subscribe(ws, task_id)
                 case "unsubscribe":
                     await manager.unsubscribe(ws, task_id)
