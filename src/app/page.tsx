@@ -11,6 +11,8 @@ type Agent = { name: string; role: string; state: string; subtaskId: string };
 type Msg = { role: string; content: string; id: number; typing?: boolean };
 
 export default function Home() {
+  console.log("[AgentSwarm] Home rendering");
+  
   const [activeConv, setActiveConv] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [agents, setAgents] = useState<Record<string, Agent>>({});
@@ -71,26 +73,33 @@ export default function Home() {
   }, []);
 
   const handleSubmit = async (query: string) => {
-    let convId = activeConv;
-    if (!convId) {
-      const c = await createConv.mutateAsync({ title: query.slice(0, 40) });
-      convId = c.id;
-      setActiveConv(convId);
-      utils.conversation.list.invalidate();
-    }
-    if (!convId) return;
-
-    setMessages(prev => [...prev, { role: "user", content: query, id: Date.now() }]);
-    setMessages(prev => [...prev, { role: "assistant", content: "Analyzing task", typing: true, id: Date.now() + 1 }]);
-    setExecState("connecting");
-    setAgents({});
-
+    console.log("[AgentSwarm] handleSubmit called with:", query);
     try {
-      const { taskId } = await submitTask.mutateAsync({ query, convId });
-      setCurrentTaskId(taskId);
-      connectSSE(taskId);
-    } catch {
-      setMessages(prev => { const msgs = [...prev]; msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], content: "Connection lost", typing: false }; return msgs; });
+      let convId = activeConv;
+      if (!convId) {
+        const c = await createConv.mutateAsync({ title: query.slice(0, 40) });
+        convId = c.id;
+        setActiveConv(convId);
+        utils.conversation.list.invalidate();
+      }
+      if (!convId) return;
+
+      setMessages(prev => [...prev, { role: "user", content: query, id: Date.now() }]);
+      setMessages(prev => [...prev, { role: "assistant", content: "Analyzing task", typing: true, id: Date.now() + 1 }]);
+      setExecState("connecting");
+      setAgents({});
+
+      try {
+        const { taskId } = await submitTask.mutateAsync({ query, convId });
+        setCurrentTaskId(taskId);
+        connectSSE(taskId);
+      } catch {
+        setMessages(prev => { const msgs = [...prev]; msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], content: "Connection lost", typing: false }; return msgs; });
+        setExecState("failed");
+      }
+    } catch (err) {
+      console.error("[AgentSwarm] handleSubmit error:", err);
+      setMessages(prev => { const msgs = [...prev]; msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], content: "Failed to start task", typing: false }; return msgs; });
       setExecState("failed");
     }
   };
@@ -120,7 +129,7 @@ export default function Home() {
         setExecState("streaming");
         connectSSE(task.id);
       }
-    } catch { /* ignore */ }
+    } catch (err) { console.error("[AgentSwarm] switchConv error:", err); }
     setLoading(false);
   };
 
