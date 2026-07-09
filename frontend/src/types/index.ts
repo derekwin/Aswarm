@@ -91,8 +91,23 @@ export interface ActivityEntry {
   time: number;
 }
 
-// ── SSE Events ──
+// ── WebSocket Events (replaces SSE) ──
 
+export type WSEvent =
+  | { type: 'status'; task_id: string; msg: string; event_id: number }
+  | { type: 'exec_state'; task_id: string; state: 'decomposing' | 'streaming' | 'completed' | 'failed'; event_id: number }
+  | { type: 'dag'; task_id: string; intent: string; subtasks: SubtaskInfo[]; parallel_groups: string[][]; event_id: number }
+  | { type: 'agent_start'; task_id: string; subtask_id: string; agent_name: string; role: string; event_id: number }
+  | { type: 'agent_done'; task_id: string; subtask_id: string; state: string; output?: string; error?: string; retry_count: number; event_id: number }
+  | { type: 'tool_call'; task_id: string; agent_name: string; tool: string; args: string; event_id: number }
+  | { type: 'done'; task_id: string; summary?: string; results?: unknown[]; event_id: number }
+  | { type: 'progress'; task_id: string; completed: number; total: number; event_id: number }
+  | { type: 'approval_request'; task_id: string; subtask_id: string; agent_name: string; action: string; reasoning: string; risk_level: string; event_id: number }
+  | { type: 'error'; task_id: string; msg: string; code?: string; event_id: number }
+  | { type: 'catchup_done'; task_id: string }
+  | { type: 'pong' };
+
+/** @deprecated Use WSEvent instead. Kept for backward compat during migration. */
 export type SSEEvent =
   | { type: 'status'; msg: string }
   | { type: 'exec_state'; state: 'decomposing' | 'streaming' | 'completed' | 'failed' }

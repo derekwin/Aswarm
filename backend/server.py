@@ -9,7 +9,7 @@ import uuid as _uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -75,14 +75,12 @@ WORKSPACE_ROOT.mkdir(parents=True, exist_ok=True)
 app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-_streams: dict[str, asyncio.Queue] = {}
-_dag_snapshots: dict[str, dict] = {}
+from backend.ws_manager import ConnectionManager
+
+manager = ConnectionManager()
 _cancel_flags: dict[str, bool] = {}
 _approval_events: dict[str, asyncio.Event] = {}  # task_id -> event, set when user approves/rejects
 _approval_decisions: dict[str, dict] = {}  # task_id -> {"approved": bool, "feedback": str}
-_event_ids: dict[str, int] = {}
-_event_archive: dict[str, list[dict]] = {}  # circular buffer, last 100 events per task for replay
-_MAX_ARCHIVE = 100
 
 _default_settings = {
     "llm_base_url": os.environ.get("AGENTSWARM_LLM_BASE_URL", "http://localhost:11434/v1"),
@@ -128,18 +126,8 @@ async def update_settings(data: dict):
 
 
 def _push_event(task_id: str, event: dict):
-    q = _streams.get(task_id)
-    if q:
-        _event_ids[task_id] = _event_ids.get(task_id, 0) + 1
-        event["event_id"] = _event_ids[task_id]
-        q.put_nowait(event)
-        # Archive for Last-Event-ID replay
-        if task_id not in _event_archive:
-            _event_archive[task_id] = []
-        archive = _event_archive[task_id]
-        archive.append(event)
-        if len(archive) > _MAX_ARCHIVE:
-            archive[:] = archive[-_MAX_ARCHIVE:]
+    """Broadcast event to all WebSocket subscribers of this task."""
+    asyncio.create_task(manager.broadcast(task_id, event))
 
 
 # ── Static ──
@@ -302,67 +290,33 @@ async def run_task(query: str = Query(...), conv_id: str = Query(default=""), la
         (WORKSPACE_ROOT / conv_id).mkdir(parents=True, exist_ok=True)
 
     task_id = f"task_{_uuid.uuid4().hex[:12]}"
-    _streams[task_id] = asyncio.Queue()
     await storage.create_task(task_id, conv_id, query)
     await storage.add_message(conv_id, "user", query)
     asyncio.create_task(_execute_task(task_id, conv_id, query, lang))
     return {"task_id": task_id, "conv_id": conv_id}
 
 
-@app.get("/stream/{task_id}")
-async def stream(task_id: str, last_event_id: int = Query(default=0)):
-    q = _streams.get(task_id)
-    if not q:
-        # If no live queue but we have archived events, serve them + done signal
-        if task_id in _event_archive:
-            async def archived_gen():
-                for evt in _event_archive[task_id]:
-                    if evt.get("event_id", 0) > last_event_id:
-                        eid = evt["event_id"]
-                        data = {k: v for k, v in evt.items() if k != "event_id"}
-                        yield f"id: {eid}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
-                # End stream with done signal
-                yield f"data: {json.dumps({'type': 'done'})}\n\n"
-            return StreamingResponse(archived_gen(), media_type="text/event-stream")
-        return StreamingResponse(_event_stream_empty(), media_type="text/event-stream")
-
-    async def event_gen():
-        # Replay missed events if Last-Event-ID provided
-        if last_event_id > 0 and task_id in _event_archive:
-            for evt in _event_archive[task_id]:
-                if evt.get("event_id", 0) > last_event_id:
-                    eid = evt["event_id"]
-                    data = {k: v for k, v in evt.items() if k != "event_id"}
-                    yield f"id: {eid}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
-
-        snapshot = _dag_snapshots.get(task_id)
-        if snapshot and last_event_id == 0:
-            _event_ids[task_id] = _event_ids.get(task_id, 0) + 1
-            eid = _event_ids[task_id]
-            yield f"id: {eid}\ndata: {json.dumps(snapshot, ensure_ascii=False)}\n\n"
-
-        last_heartbeat = asyncio.get_event_loop().time()
+@app.websocket("/ws")
+async def websocket_endpoint(ws: WebSocket):
+    await manager.connect(ws)
+    try:
         while True:
-            try:
-                event = await asyncio.wait_for(q.get(), timeout=15.0)
-            except asyncio.TimeoutError:
-                now = asyncio.get_event_loop().time()
-                if now - last_heartbeat >= 14:
-                    yield ":ping\n\n"
-                    last_heartbeat = now
-                continue
-
-            eid = event.get("event_id", _event_ids.get(task_id, 0))
-            data = {k: v for k, v in event.items() if k != "event_id"}
-            yield f"id: {eid}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
-            if event.get("type") == "done":
-                break
-
-    return StreamingResponse(event_gen(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no"})
-
-
-async def _event_stream_empty():
-    yield f"data: {json.dumps({'type': 'error', 'msg': 'task not found'})}\n\n"
+            msg = await ws.receive_json()
+            action = msg.get("action", "")
+            task_id = msg.get("task_id", "")
+            match action:
+                case "subscribe":
+                    await manager.subscribe(ws, task_id)
+                case "unsubscribe":
+                    await manager.unsubscribe(ws, task_id)
+                case "cancel":
+                    _cancel_flags[task_id] = True
+                    await storage.update_task(task_id, "cancelled")
+                    _push_event(task_id, {"type": "done", "summary": "Task cancelled by user"})
+                case "ping":
+                    await ws.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        await manager.disconnect(ws)
 
 
 # ── Cancel Task ──
@@ -463,7 +417,6 @@ async def resume_from_checkpoint(task_id: str, checkpoint_path: str = Query(defa
         raise HTTPException(404, "Task not found")
 
     new_task_id = f"resume_{task_id}_{_uuid.uuid4().hex[:6]}"
-    _streams[new_task_id] = asyncio.Queue()
     await storage.create_task(new_task_id, task["conversation_id"], f"Resume from checkpoint: {task.get('query', task_id)}")
     asyncio.create_task(_execute_resume(new_task_id, task_id, checkpoint_path or None))
     return {"task_id": new_task_id, "original_task_id": task_id}
@@ -550,7 +503,7 @@ async def _execute_resume(new_task_id: str, original_task_id: str, checkpoint_pa
             "type": "dag", "intent": dag.intent,
             "subtasks": subtask_info, "parallel_groups": dag.parallel_groups,
         })
-        _dag_snapshots[new_task_id] = {"type": "dag", "intent": dag.intent, "subtasks": subtask_info, "parallel_groups": dag.parallel_groups}
+        manager.store_dag_snapshot(new_task_id, {"type": "dag", "intent": dag.intent, "subtasks": subtask_info, "parallel_groups": dag.parallel_groups})
         _push_event(new_task_id, {"type": "exec_state", "state": "streaming"})
 
         state = await orchestrator._execute_from_state(state)
@@ -566,8 +519,8 @@ async def _execute_resume(new_task_id: str, original_task_id: str, checkpoint_pa
         _push_event(new_task_id, {"type": "error", "msg": str(e), "code": _classify_error(e)})
     finally:
         await asyncio.sleep(30)
-        _streams.pop(new_task_id, None)
-        _dag_snapshots.pop(new_task_id, None)
+        manager.cleanup(new_task_id)
+        _cancel_flags.pop(new_task_id, None)
 
 
 # ── Rerun API ──
@@ -608,8 +561,7 @@ async def rerun_subtask(task_id: str, subtask_id: str, prompt: str = Query(defau
     if prompt:
         target_subtask["prompt"] = prompt
 
-    new_task_id = f"rerun_{task_id}_{subtask_id}_{len(_streams)}"
-    _streams[new_task_id] = asyncio.Queue()
+    new_task_id = f"rerun_{task_id}_{subtask_id}_{_uuid.uuid4().hex[:6]}"
     await storage.create_task(new_task_id, task["conversation_id"], f"Rerun: {target_subtask.get('name', subtask_id)}")
 
     new_subtasks = [s for s in dag_data["subtasks"] if s["id"] in downstream_ids]
@@ -731,7 +683,7 @@ async def _execute_task(task_id: str, conv_id: str, query: str, lang: str = "en"
             "type": "dag", "intent": dag.intent,
             "subtasks": subtask_info, "parallel_groups": dag.parallel_groups,
         })
-        _dag_snapshots[task_id] = {"type": "dag", "intent": dag.intent, "subtasks": subtask_info, "parallel_groups": dag.parallel_groups}
+        manager.store_dag_snapshot(task_id, {"type": "dag", "intent": dag.intent, "subtasks": subtask_info, "parallel_groups": dag.parallel_groups})
         await storage.store_dag_data(task_id, json.dumps({"intent": dag.intent, "subtasks": subtask_info, "parallel_groups": dag.parallel_groups}))
         _push_event(task_id, {"type": "status", "msg": "Agents starting..."})
         _push_event(task_id, {"type": "exec_state", "state": "streaming"})
@@ -772,11 +724,8 @@ async def _execute_task(task_id: str, conv_id: str, query: str, lang: str = "en"
     finally:
         # Keep streams/archive alive for 30s so late-connecting clients can still replay
         await asyncio.sleep(30)
-        _streams.pop(task_id, None)
+        manager.cleanup(task_id)
         _cancel_flags.pop(task_id, None)
-        _event_ids.pop(task_id, None)
-        _dag_snapshots.pop(task_id, None)
-        _event_archive.pop(task_id, None)
 
 
 async def _execute_rerun(task_id: str, conv_id: str, query: str, subtasks: list, parallel_groups: list):
@@ -824,7 +773,7 @@ async def _execute_rerun(task_id: str, conv_id: str, query: str, subtasks: list,
             "type": "dag", "intent": "rerun",
             "subtasks": subtask_info, "parallel_groups": dag.parallel_groups,
         })
-        _dag_snapshots[task_id] = {"type": "dag", "intent": "rerun", "subtasks": subtask_info, "parallel_groups": dag.parallel_groups}
+        manager.store_dag_snapshot(task_id, {"type": "dag", "intent": "rerun", "subtasks": subtask_info, "parallel_groups": dag.parallel_groups})
 
         state = await orchestrator.execute(dag)
         results = [{"id": r.subtask_id, "state": r.state.value, "output": r.output, "error": r.error}
@@ -837,8 +786,8 @@ async def _execute_rerun(task_id: str, conv_id: str, query: str, subtasks: list,
         _push_event(task_id, {"type": "error", "msg": str(e), "code": _classify_error(e)})
     finally:
         await asyncio.sleep(30)
-        _streams.pop(task_id, None)
-        _dag_snapshots.pop(task_id, None)
+        manager.cleanup(task_id)
+        _cancel_flags.pop(task_id, None)
 
 
 def _classify_error(e: Exception) -> str:

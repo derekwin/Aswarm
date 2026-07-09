@@ -2,6 +2,7 @@ import { useCallback, useRef, useEffect } from 'react';
 import { useConv } from '@/context/ConvContext';
 import { useUI } from '@/context/UIContext';
 import { useT } from '@/hooks/useT';
+import { useWebSocket } from '@/context/WebSocketContext';
 import { api } from '@/api';
 import type { SSEEvent, ErrorCode } from '@/types';
 import { ERROR_SUGGESTIONS } from '@/types';
@@ -25,20 +26,17 @@ export function useTaskRunner() {
   const { state: conv, dispatch: convDispatch } = useConv();
   const { state: ui, dispatch: uiDispatch } = useUI();
   const t = useT();
-  const eventSourceRef = useRef<EventSource | null>(null);
   const execStateRef = useRef(conv.execState);
-  const connectSSERef = useRef<((taskId: string, fromEventId?: number) => void) | null>(null);
   const taskIdRef = useRef<string | null>(null);
   const convIdRef = useRef<string | null>(null);
-  const lastEventIdRef = useRef<number>(0);
   const debounceTimer = useRef(0);
   const startTimeRef = useRef<Record<string, number>>({});
-  const reconnectAttemptRef = useRef(0);
-  const pollTimerRef = useRef(0);
-  const pollActiveRef = useRef(false);
 
-  const handleSSEEvent = useCallback((d: SSEEvent, es: EventSource) => {
+  const handleWSEvent = useCallback((raw: Record<string, unknown>) => {
+    const d = raw as SSEEvent;
     switch (d.type) {
+      case 'catchup_done':
+        break;
       case 'status':
         // Agent cards already show progress — skip redundant status text in chat
         break;
@@ -86,14 +84,12 @@ export function useTaskRunner() {
           },
         });
         break;
-      case 'done': {
+      case 'done':
         uiDispatch({ type: 'SET_CONNECTED', payload: false });
         if (d.summary) convDispatch({ type: 'APPEND_MSG', payload: { role: 'assistant', content: d.summary } });
         convDispatch({ type: 'SET_EXEC_STATE', payload: 'completed' });
-        es?.close?.();
         uiDispatch({ type: 'ADD_TOAST', payload: `✓ ${t('complete')}` });
         break;
-      }
       case 'error': {
         uiDispatch({ type: 'SET_CONNECTED', payload: false });
         convDispatch({ type: 'SET_ERROR', payload: { message: d.msg, code: d.code } });
@@ -157,87 +153,9 @@ export function useTaskRunner() {
     }
   }, [conv.execState]);
 
-  useEffect(() => {
-    return () => {
-      eventSourceRef.current?.close();
-      pollActiveRef.current = false;
-      clearTimeout(pollTimerRef.current);
-    };
-  }, []);
+  const { subscribe, cancel: wsCancel, registerHandler } = useWebSocket();
 
-  const connectSSE = useCallback((taskId: string, fromEventId = 0) => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.onerror = null;
-      eventSourceRef.current.close();
-    }
-    taskIdRef.current = taskId;
-    const url = fromEventId > 0 ? `/stream/${taskId}?last_event_id=${fromEventId}` : `/stream/${taskId}`;
-    const es = new EventSource(url);
-    eventSourceRef.current = es;
-
-    es.onmessage = (e: MessageEvent) => {
-      try {
-        const d: SSEEvent = JSON.parse(e.data);
-        if (e.lastEventId) {
-          lastEventIdRef.current = parseInt(e.lastEventId, 10);
-          convDispatch({ type: 'SET_LAST_EVENT_ID', payload: lastEventIdRef.current });
-        }
-        // Reset backoff on successful message and stop polling
-        reconnectAttemptRef.current = 0;
-        if (pollActiveRef.current) {
-          pollActiveRef.current = false;
-          clearTimeout(pollTimerRef.current);
-        }
-        handleSSEEvent(d, es);
-      } catch { /* malformed SSE data, ignore */ }
-    };
-
-    es.onerror = () => {
-      es.close();
-      const isRunning = execStateRef.current === 'streaming' || execStateRef.current === 'reconnecting' || execStateRef.current === 'waiting_approval';
-      if (isRunning) {
-        // Exponential backoff reconnection with lastEventId for gap recovery
-        reconnectAttemptRef.current += 1;
-        const delay = Math.min(1000 * (2 ** (reconnectAttemptRef.current - 1)), 30000);
-        setTimeout(() => {
-          if (execStateRef.current === 'streaming' || execStateRef.current === 'reconnecting') {
-            connectSSERef.current?.(taskId, lastEventIdRef.current);
-          }
-        }, delay);
-
-        // Fallback: poll via REST — only start if not already polling
-        if (!pollActiveRef.current) {
-          pollActiveRef.current = true;
-          const poll = async () => {
-            if (!pollActiveRef.current || !convIdRef.current) return;
-            try {
-              const data = await api.getRunningTask(convIdRef.current);
-              if (!data.task || data.task.id !== taskId) { pollActiveRef.current = false; return; }
-              if (data.task.status === 'completed' || data.task.status === 'failed' || data.task.status === 'cancelled') {
-                pollActiveRef.current = false;
-                convDispatch({ type: 'SET_EXEC_STATE', payload: data.task.status === 'completed' ? 'completed' : 'failed' });
-                return;
-              }
-              for (const r of (data.agent_results || [])) {
-                convDispatch({ type: 'UPDATE_AGENT', payload: { id: r.subtask_id, data: { state: r.state as 'pending' | 'running' | 'completed' | 'failed', output: r.output, error: r.error } } });
-              }
-            } catch { pollActiveRef.current = false; }
-            if (pollActiveRef.current) pollTimerRef.current = window.setTimeout(poll, 2000);
-          };
-          pollTimerRef.current = window.setTimeout(poll, 2000);
-          uiDispatch({ type: 'ADD_TOAST', payload: '⚠ Polling for updates...' });
-        }
-      } else {
-        uiDispatch({ type: 'SET_CONNECTED', payload: false });
-        convDispatch({ type: 'SET_EXEC_STATE', payload: 'failed' });
-        uiDispatch({ type: 'ADD_TOAST', payload: `⚠ ${t('connectionLost')}` });
-      }
-    };
-  }, [convDispatch, uiDispatch, handleSSEEvent, t]);
-
-  useEffect(() => { connectSSERef.current = connectSSE; }, [connectSSE]);
-
-  const { runMockTask } = useMockRunner((event) => handleSSEEvent(event as SSEEvent, eventSourceRef.current!));
+  const { runMockTask } = useMockRunner((event) => handleWSEvent(event as Record<string, unknown>));
 
   const runTask = useCallback(async (convId: string, query: string) => {
     // Append user message and start fresh assistant context
@@ -261,23 +179,24 @@ export function useTaskRunner() {
     try {
       const { task_id } = await api.runTask(query, convId, ui.lang);
       convDispatch({ type: 'SET_TASK_ID', payload: task_id });
+      taskIdRef.current = task_id;
       uiDispatch({ type: 'SET_CONNECTED', payload: true });
       // Update sidebar title immediately from query
       try {
         const title = query.slice(0, 40);
         localStorage.setItem(`conv_title:${convId}`, title);
       } catch { /* ignore */ }
-      connectSSE(task_id);
+      registerHandler(task_id, handleWSEvent);
+      subscribe(task_id);
     } catch {
       uiDispatch({ type: 'SET_CONNECTED', payload: false });
       convDispatch({ type: 'SET_EXEC_STATE', payload: 'failed' });
       convDispatch({ type: 'UPDATE_LAST_MSG', payload: { content: t('loadError'), typing: false } });
       uiDispatch({ type: 'ADD_TOAST', payload: t('startTaskFailed') });
     }
-  }, [convDispatch, uiDispatch, connectSSE, t]);
+  }, [convDispatch, uiDispatch, subscribe, registerHandler, handleWSEvent, t]);
 
   const reconnect = useCallback((taskId: string, agentResults: { subtask_id: string; agent_name: string; state: string; output?: string; error?: string; retry_count: number }[]) => {
-    if (eventSourceRef.current && eventSourceRef.current.readyState !== EventSource.CLOSED) return;
     uiDispatch({ type: 'SET_CONNECTED', payload: true });
 
     for (const r of agentResults) {
@@ -301,30 +220,26 @@ export function useTaskRunner() {
     }
 
     convDispatch({ type: 'SET_EXEC_STATE', payload: 'reconnecting' });
-    connectSSE(taskId);
-  }, [convDispatch, uiDispatch, connectSSE]);
+    registerHandler(taskId, handleWSEvent);
+    subscribe(taskId);
+  }, [convDispatch, uiDispatch, subscribe, registerHandler, handleWSEvent]);
 
   const cancelTask = useCallback(async (silent = false) => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.onerror = null;
-      eventSourceRef.current.close();
-    }
-    eventSourceRef.current = null;
     uiDispatch({ type: 'SET_CONNECTED', payload: false });
     if (!silent) {
       const tid = taskIdRef.current;
       if (tid) {
-        try { await api.cancelTask(tid); } catch { /* best effort */ }
+        wsCancel(tid);
       }
       convDispatch({ type: 'SET_EXEC_STATE', payload: 'cancelled' });
       convDispatch({ type: 'UPDATE_LAST_MSG', payload: { content: t('cancelled'), typing: false } });
     }
-  }, [convDispatch, uiDispatch, t]);
+  }, [wsCancel, convDispatch, uiDispatch, t]);
 
   const cleanupRefs = useCallback(() => {
     convIdRef.current = null;
     taskIdRef.current = null;
   }, []);
 
-  return { runTask, reconnect, cancelTask, connectSSE, cleanupRefs };
+  return { runTask, reconnect, cancelTask, cleanupRefs, handleWSEvent };
 }

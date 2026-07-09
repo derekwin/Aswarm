@@ -2,6 +2,7 @@ import { useEffect, useRef, useLayoutEffect, startTransition } from 'react';
 import { AppProvider, useApp } from '@/context/AppContext';
 import { UIProvider, useUI } from '@/context/UIContext';
 import { ConvProvider, useConv } from '@/context/ConvContext';
+import { WebSocketProvider, useWebSocket } from '@/context/WebSocketContext';
 import { useTaskRunner } from '@/hooks/useTaskRunner';
 import { usePanelWidth } from '@/hooks/usePanelWidth';
 import { api } from '@/api';
@@ -20,7 +21,8 @@ function AppInner() {
   const { state: app } = useApp();
   const { state: conv, dispatch: convDispatch } = useConv();
   const { state: ui, dispatch: uiDispatch } = useUI();
-  const { runTask, reconnect, cancelTask, connectSSE, cleanupRefs } = useTaskRunner();
+  const { runTask, reconnect, cancelTask, cleanupRefs, handleWSEvent } = useTaskRunner();
+  const { subscribe, registerHandler } = useWebSocket();
   const { panelWidth, onPanelResize } = usePanelWidth();
   const scrollRef = useRef<HTMLDivElement>(null);
   const loadingConvId = useRef<string | null>(null);
@@ -78,7 +80,6 @@ function AppInner() {
     loadingConvId.current = activeId;
 
     // Phase A: localStorage cache restore
-    let lastEventId = 0;
     let snapshotRestored = false;
     try {
       const cached = localStorage.getItem(`conv:${activeId}`);
@@ -89,7 +90,6 @@ function AppInner() {
             convDispatch({ type: 'RESTORE_SNAPSHOT', payload: { ...entry, loading: false, _fromCache: true } });
           });
           snapshotRestored = true;
-          lastEventId = entry._lastEventId || 0;
         }
       }
     } catch { /* ignore */ }
@@ -148,7 +148,8 @@ function AppInner() {
         convDispatch({ type: 'SET_EXEC_STATE', payload: 'failed' });
       } else if (status === 'running') {
         convDispatch({ type: 'SET_EXEC_STATE', payload: 'reconnecting' });
-        connectSSE(taskData.task.id, lastEventId);
+        registerHandler(taskData.task.id, handleWSEvent);
+        subscribe(taskData.task.id);
       }
       convDispatch({ type: 'SET_LOADING', payload: false });
     });
@@ -185,7 +186,9 @@ export default function App() {
     <AppProvider>
       <UIProvider>
         <ConvProvider>
-          <AppInner />
+          <WebSocketProvider>
+            <AppInner />
+          </WebSocketProvider>
         </ConvProvider>
       </UIProvider>
     </AppProvider>
