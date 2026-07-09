@@ -176,7 +176,8 @@ export function useTaskRunner() {
       } catch { /* ignore */ }
       registerHandler(task_id, handleWSEvent);
       subscribe(task_id, convId);
-    } catch {
+    } catch (err) {
+      console.error('[AgentSwarm] runTask failed:', err);
       uiDispatch({ type: 'SET_CONNECTED', payload: false });
       convDispatch({ type: 'SET_EXEC_STATE', payload: 'failed' });
       convDispatch({ type: 'UPDATE_LAST_MSG', payload: { content: t('loadError'), typing: false } });
