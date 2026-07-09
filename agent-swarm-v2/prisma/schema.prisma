@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Conversation {
+  id        String    @id
+  title     String
+  createdAt DateTime  @default(now()) @map("created_at")
+  messages  Message[]
+  tasks     Task[]
+}
+
+model Message {
+  id             Int          @id @default(autoincrement())
+  conversationId String       @map("conversation_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  role           String
+  content        String
+  createdAt      DateTime     @default(now()) @map("created_at")
+}
+
+model Task {
+  id             String        @id
+  conversationId String        @map("conversation_id")
+  conversation   Conversation  @relation(fields: [conversationId], references: [id])
+  query          String
+  status         String        @default("pending")
+  intent         String?
+  subtaskCount   Int           @default(0) @map("subtask_count")
+  dagData        String?       @map("dag_data")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  agentResults   AgentResult[]
+}
+
+model AgentResult {
+  id         Int     @id @default(autoincrement())
+  taskId     String  @map("task_id")
+  task       Task    @relation(fields: [taskId], references: [id])
+  subtaskId  String  @map("subtask_id")
+  agentName  String  @map("agent_name")
+  state      String
+  output     String?
+  error      String?
+  retryCount Int     @default(0) @map("retry_count")
+}
+
+model Settings {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String
+}
