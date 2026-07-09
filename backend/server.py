@@ -127,6 +127,7 @@ async def update_settings(data: dict):
 
 def _push_event(task_id: str, event: dict):
     """Broadcast event to all WebSocket subscribers of this task."""
+    event["task_id"] = task_id
     asyncio.create_task(manager.broadcast(task_id, event))
 
 
@@ -503,7 +504,7 @@ async def _execute_resume(new_task_id: str, original_task_id: str, checkpoint_pa
             "type": "dag", "intent": dag.intent,
             "subtasks": subtask_info, "parallel_groups": dag.parallel_groups,
         })
-        manager.store_dag_snapshot(new_task_id, {"type": "dag", "intent": dag.intent, "subtasks": subtask_info, "parallel_groups": dag.parallel_groups})
+        manager.store_dag_snapshot(new_task_id, {"type": "dag", "task_id": new_task_id, "intent": dag.intent, "subtasks": subtask_info, "parallel_groups": dag.parallel_groups})
         _push_event(new_task_id, {"type": "exec_state", "state": "streaming"})
 
         state = await orchestrator._execute_from_state(state)
@@ -683,7 +684,7 @@ async def _execute_task(task_id: str, conv_id: str, query: str, lang: str = "en"
             "type": "dag", "intent": dag.intent,
             "subtasks": subtask_info, "parallel_groups": dag.parallel_groups,
         })
-        manager.store_dag_snapshot(task_id, {"type": "dag", "intent": dag.intent, "subtasks": subtask_info, "parallel_groups": dag.parallel_groups})
+        manager.store_dag_snapshot(task_id, {"type": "dag", "task_id": task_id, "intent": dag.intent, "subtasks": subtask_info, "parallel_groups": dag.parallel_groups})
         await storage.store_dag_data(task_id, json.dumps({"intent": dag.intent, "subtasks": subtask_info, "parallel_groups": dag.parallel_groups}))
         _push_event(task_id, {"type": "status", "msg": "Agents starting..."})
         _push_event(task_id, {"type": "exec_state", "state": "streaming"})
@@ -773,7 +774,7 @@ async def _execute_rerun(task_id: str, conv_id: str, query: str, subtasks: list,
             "type": "dag", "intent": "rerun",
             "subtasks": subtask_info, "parallel_groups": dag.parallel_groups,
         })
-        manager.store_dag_snapshot(task_id, {"type": "dag", "intent": "rerun", "subtasks": subtask_info, "parallel_groups": dag.parallel_groups})
+        manager.store_dag_snapshot(task_id, {"type": "dag", "task_id": task_id, "intent": "rerun", "subtasks": subtask_info, "parallel_groups": dag.parallel_groups})
 
         state = await orchestrator.execute(dag)
         results = [{"id": r.subtask_id, "state": r.state.value, "output": r.output, "error": r.error}
