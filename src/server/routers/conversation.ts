@@ -1,40 +1,35 @@
 import { router, publicProcedure, z } from "../trpc";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/db";
+import { conversations, messages } from "@/db/schema";
+import { eq, desc } from "drizzle-orm";
 
 export const convRouter = router({
   list: publicProcedure.query(async () => {
-    const convs = await prisma.conversation.findMany({
-      orderBy: { createdAt: "desc" },
-      select: { id: true, title: true, createdAt: true },
-    });
-    return convs;
+    return db.select({ id: conversations.id, title: conversations.title, createdAt: conversations.createdAt })
+      .from(conversations).orderBy(desc(conversations.createdAt)).all();
   }),
 
   create: publicProcedure
     .input(z.object({ title: z.string().default("New Task") }))
     .mutation(async ({ input }) => {
       const id = `conv_${Date.now()}`;
-      const conv = await prisma.conversation.create({
-        data: { id, title: input.title },
-      });
-      return conv;
+      db.insert(conversations).values({ id, title: input.title, createdAt: new Date().toISOString() }).run();
+      return { id, title: input.title };
     }),
 
   get: publicProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ input }) => {
-      const conv = await prisma.conversation.findUnique({
-        where: { id: input.id },
-        include: { messages: { orderBy: { createdAt: "asc" } } },
-      });
+      const conv = db.select().from(conversations).where(eq(conversations.id, input.id)).get();
       if (!conv) throw new Error("Conversation not found");
-      return conv;
+      const msgs = db.select().from(messages).where(eq(messages.conversationId, input.id)).orderBy(messages.createdAt).all();
+      return { ...conv, messages: msgs };
     }),
 
   delete: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ input }) => {
-      await prisma.conversation.delete({ where: { id: input.id } });
+      db.delete(conversations).where(eq(conversations.id, input.id)).run();
       return { ok: true };
     }),
 });
