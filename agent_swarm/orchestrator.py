@@ -10,7 +10,7 @@ from typing import Any
 from agent_swarm.agent_factory import Agent, AgentFactory
 from agent_swarm.context import get_context
 from agent_swarm.data_buffer import DataBuffer, KeyContract
-from agent_swarm.infrastructure.llm_client import LLMClient
+from agent_swarm.infrastructure.llm_client import LLMClient, BudgetExceededError
 from agent_swarm.infrastructure.tool_registry import ToolRegistry
 from agent_swarm.judge import (
     JudgeEvaluation,
@@ -463,6 +463,21 @@ class SwarmOrchestrator:
                 self._emit("agent_done", subtask_id=subtask_id, state=result.state.value,
                           output=result.output, error=result.error, retry_count=result.retry_count)
                 return result
+            except BudgetExceededError:
+                compressed = self._compress_context(messages)
+                if compressed is not messages:
+                    logger.info(f"  [{agent.name}] Budget exceeded, context compressed: {len(messages)} → {len(compressed)} messages")
+                    messages = compressed
+                    continue
+                logger.error(f"  [{agent.name}] Budget exceeded with nothing left to compress")
+                result = SubtaskResult(
+                    subtask_id=subtask_id, state=SubtaskState.FAILED,
+                    error="Budget exceeded and context cannot be compressed further",
+                    iterations_used=iteration,
+                )
+                self._emit("agent_done", subtask_id=subtask_id, state=result.state.value,
+                          output=result.output, error=result.error, retry_count=result.retry_count)
+                return result
             except Exception as e:
                 logger.error(f"Agent '{agent.name}' error at iteration {iteration}: {e}")
                 result = SubtaskResult(
@@ -495,6 +510,31 @@ class SwarmOrchestrator:
         self._emit("agent_done", subtask_id=subtask_id, state=result.state.value,
                   output=result.output, error=result.error, retry_count=result.retry_count)
         return result
+
+    def _compress_context(self, messages: list[dict]) -> list[dict]:
+        """Compress conversation history when budget is exceeded.
+
+        Strategy: keep system prompt + last 4 messages, summarize the middle
+        into a single system message. Returns original if nothing to compress.
+        """
+        if len(messages) <= 6:
+            return messages  # nothing worth compressing
+
+        KEEP_TAIL = 4
+        system_msg = messages[0]
+        middle = messages[1:-KEEP_TAIL]
+        tail = messages[-KEEP_TAIL:]
+
+        summary = "\n".join(
+            f"[{m.get('role', '?')}] {str(m.get('content', ''))[:200]}"
+            for m in middle[-10:]  # summarize last 10 of the middle
+        )
+
+        return [
+            system_msg,
+            {"role": "system", "content": f"[Context Summary]\nEarlier conversation has been summarized:\n{summary}\n\nContinue from the latest context below."},
+            *tail,
+        ]
 
     async def _evaluate_quality(
         self,
