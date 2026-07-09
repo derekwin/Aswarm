@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import uuid as _uuid
 from collections.abc import Callable
 from typing import Any
 
@@ -19,7 +20,7 @@ from agent_swarm.judge import (
     judge_output_heuristic,
 )
 from agent_swarm.meta_scheduler import MetaScheduler
-from agent_swarm.models import AgentConfig, ApprovalRequest, Subtask, SubtaskResult, SubtaskState, SwarmState, TaskDAG
+from agent_swarm.models import AgentConfig, Subtask, SubtaskResult, SubtaskState, SwarmState, TaskDAG
 from agent_swarm.state_manager import StateManager
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,8 @@ class ResultAggregator:
 
 class SwarmOrchestrator:
     MAX_SEARCH_ROUNDS = 4
+    AGENT_TIMEOUT = 300       # max seconds per agent execution
+    LLM_CALL_TIMEOUT = 120    # max seconds per LLM call
     ENABLE_LLM_JUDGE = True       # set False to use heuristic-only judge
     JUDGE_MODEL = "qwen3:4b"      # small model for quality evaluation
     MAX_QUALITY_RETRIES = 2       # retries triggered by Judge within a single run
@@ -134,6 +137,8 @@ class SwarmOrchestrator:
 
                 batch = []
                 for subtask_id in pending_ids:
+                    if self._check_cancelled():
+                        break
                     subtask = self._find_subtask(dag, subtask_id)
                     agent = self.factory.create(subtask.agent_config)
                     # Build context from upstream results via DataBuffer
@@ -280,7 +285,8 @@ class SwarmOrchestrator:
                 prompt=parsed.get("prompt", subtask.prompt),
                 depends_on=subtask.depends_on,
             )
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Replan subtask [{subtask.id}] failed: {e}")
             return None
 
     async def _redecompose_dag(
@@ -320,7 +326,6 @@ class SwarmOrchestrator:
             raw = (msg.content or "").strip()
             parsed = MetaScheduler._parse_json_output(raw)
 
-            import uuid as _uuid
             new_task_id = f"redecompose_{dag.task_id}_{_uuid.uuid4().hex[:6]}"
             new_dag = TaskDAG(
                 task_id=new_task_id,
@@ -389,10 +394,13 @@ class SwarmOrchestrator:
                 judge_feedback = ""  # only apply once per retry
 
             try:
-                msg = await self._call_llm(
-                    model=agent.model,
-                    messages=messages,
-                    tools=active_tools,
+                msg = await asyncio.wait_for(
+                    self._call_llm(
+                        model=agent.model,
+                        messages=messages,
+                        tools=active_tools,
+                    ),
+                    timeout=self.LLM_CALL_TIMEOUT,
                 )
 
                 # ── HITL: check for tool calls needing approval ──
@@ -490,6 +498,16 @@ class SwarmOrchestrator:
                     messages.append({"role": "assistant", "content": final_output})
                     break
 
+            except asyncio.TimeoutError:
+                logger.error(f"Agent '{agent.name}' LLM call timed out after {self.LLM_CALL_TIMEOUT}s")
+                result = SubtaskResult(
+                    subtask_id=subtask_id, state=SubtaskState.FAILED,
+                    error=f"LLM call timed out after {self.LLM_CALL_TIMEOUT}s",
+                    iterations_used=iteration,
+                )
+                self._emit("agent_done", subtask_id=subtask_id, state=result.state.value,
+                          output=result.output, error=result.error, retry_count=result.retry_count)
+                return result
             except Exception as e:
                 logger.error(f"Agent '{agent.name}' error at iteration {iteration}: {e}")
                 result = SubtaskResult(
