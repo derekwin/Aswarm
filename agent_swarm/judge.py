@@ -132,7 +132,7 @@ async def judge_output(
     task_prompt: str,
     output: str,
     agent_role: str = "",
-    judge_model: str = "qwen3:3b",
+    judge_model: str = "qwen3:4b",
 ) -> JudgeEvaluation:
     """Evaluate agent output quality using a small LLM.
 
@@ -141,7 +141,7 @@ async def judge_output(
         task_prompt: the original subtask prompt
         output: the agent's final output text
         agent_role: the agent's role (e.g. 'web_searcher', 'data_analyst')
-        judge_model: lightweight model for judging (default qwen3:3b)
+        judge_model: lightweight model for judging (default qwen3:4b)
     """
     if not output or len(output.strip()) < 20:
         return JudgeEvaluation(

@@ -45,7 +45,7 @@ class ResultAggregator:
 class SwarmOrchestrator:
     MAX_SEARCH_ROUNDS = 4
     ENABLE_LLM_JUDGE = True       # set False to use heuristic-only judge
-    JUDGE_MODEL = "qwen3:3b"      # small model for quality evaluation
+    JUDGE_MODEL = "qwen3:4b"      # small model for quality evaluation
     MAX_QUALITY_RETRIES = 2       # retries triggered by Judge within a single run
 
     def __init__(

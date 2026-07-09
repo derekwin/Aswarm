@@ -206,7 +206,7 @@ class MetaScheduler:
 
         Uses a small model by default; falls back to decomposer_model if none specified.
         """
-        model = model or "qwen3:3b"
+        model = model or "qwen3:4b"
         try:
             msg = await self.llm.chat(
                 model,
