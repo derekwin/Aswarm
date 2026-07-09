@@ -1,6 +1,6 @@
 "use client";
 
-type Agent = { name: string; role: string; state: string; subtaskId: string };
+type Agent = { name: string; role: string; state: string; subtaskId: string; output?: string; error?: string };
 
 function SkeletonRow() {
   return (
@@ -12,7 +12,11 @@ function SkeletonRow() {
   );
 }
 
-export function AgentTracker({ agents, execState }: { agents: Record<string, Agent>; execState: string }) {
+export function AgentTracker({ agents, execState, onAgentClick }: {
+  agents: Record<string, Agent>;
+  execState: string;
+  onAgentClick?: (agent: Agent) => void;
+}) {
   const list = Object.values(agents);
   const hasAgents = list.some(a => a.name);
   const completed = list.filter(a => a.state === "completed" || a.state === "failed").length;
@@ -38,12 +42,12 @@ export function AgentTracker({ agents, execState }: { agents: Record<string, Age
       ) : (
         <div className={list.length > 1 ? "divide-y divide-zinc-700/50" : ""}>
           {list.map(a => (
-            <div key={a.subtaskId} className="flex items-center gap-2 py-1.5 px-3 text-xs hover:bg-white/4 transition-colors cursor-pointer">
+            <button key={a.subtaskId} onClick={() => onAgentClick?.(a)} className="flex items-center gap-2 w-full text-left py-1.5 px-3 text-xs hover:bg-white/4 transition-colors">
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.state === "running" ? "bg-accent animate-pulse" : a.state === "completed" ? "bg-green-400" : a.state === "failed" ? "bg-red-400" : "bg-zinc-600"}`} />
               <span className="text-zinc-300 truncate">{a.name}</span>
               {a.role && <span className="text-zinc-500 px-1 py-0.5 rounded bg-zinc-700/50 text-[10px] shrink-0">{a.role}</span>}
               <span className={`ml-auto text-[10px] shrink-0 ${a.state === "running" ? "text-accent" : a.state === "completed" ? "text-green-400" : a.state === "failed" ? "text-red-400" : "text-zinc-500"}`}>{a.state}</span>
-            </div>
+            </button>
           ))}
         </div>
       )}
