@@ -60,7 +60,6 @@ class SwarmOrchestrator:
         max_subtask_retries: int = 2,
         on_event: Callable[[str, dict[str, Any]], None] | None = None,
         is_cancelled: Callable[[], bool] | None = None,
-        wait_for_approval: Callable[[], Any] | None = None,
     ):
         self.tools = tools
         self.factory = factory
@@ -70,7 +69,6 @@ class SwarmOrchestrator:
         self.aggregator = ResultAggregator()
         self.on_event = on_event
         self.is_cancelled = is_cancelled or (lambda: False)
-        self.wait_for_approval = wait_for_approval
 
     def _check_cancelled(self) -> bool:
         return self.is_cancelled()
@@ -89,7 +87,10 @@ class SwarmOrchestrator:
 
     async def _call_llm(self, model: str, messages: list[dict], tools: list[dict] | None = None,
                    temperature: float = 0.3):
-        return await self.llm.chat(model, messages, tools, temperature)
+        return await asyncio.wait_for(
+            self.llm.chat(model, messages, tools, temperature),
+            timeout=self.LLM_CALL_TIMEOUT,
+        )
 
     async def _call_tool(self, name: str, **kwargs):
         return await self.tools.call(name, **kwargs)
@@ -394,57 +395,11 @@ class SwarmOrchestrator:
                 judge_feedback = ""  # only apply once per retry
 
             try:
-                msg = await asyncio.wait_for(
-                    self._call_llm(
-                        model=agent.model,
-                        messages=messages,
-                        tools=active_tools,
-                    ),
-                    timeout=self.LLM_CALL_TIMEOUT,
+                msg = await self._call_llm(
+                    model=agent.model,
+                    messages=messages,
+                    tools=active_tools,
                 )
-
-                # ── HITL: check for tool calls needing approval ──
-                if msg.tool_calls and self.wait_for_approval:
-                    tool_calls_to_approve = []
-                    tool_calls_approved = []
-                    for tc in msg.tool_calls:
-                        if tc.function.name in ("browser", "file_writer", "shell"):
-                            tool_calls_to_approve.append(tc)
-                        else:
-                            tool_calls_approved.append(tc)
-
-                    if tool_calls_to_approve:
-                        # Emit approval for the first risky tool call; only execute that ONE
-                        # after approval, not all risky calls — user only approved one action
-                        tc = tool_calls_to_approve[0]
-                        try:
-                            tc_args = json.loads(tc.function.arguments)
-                        except Exception:
-                            tc_args = {}
-                        self._emit("approval_request",
-                                  subtask_id=subtask_id,
-                                  agent_name=agent.name,
-                                  action=f"{tc.function.name}({json.dumps(tc_args, ensure_ascii=False)[:200]})",
-                                  reasoning=f"Agent '{agent.name}' wants to execute {tc.function.name}",
-                                  risk_level="high" if tc.function.name == "shell" else "medium")
-                        logger.info(f"  [{agent.name}] Awaiting user approval for {tc.function.name}")
-                        decision = await self.wait_for_approval()
-                        if not decision or not decision.get("approved"):
-                            feedback = (decision or {}).get("feedback", "User rejected the action")
-                            messages.append({
-                                "role": "system",
-                                "content": f"[User Decision] Action REJECTED: {feedback}. Adjust your approach.",
-                            })
-                            continue  # go to next iteration with feedback
-                        # Approved: add approval note, then execute only the approved call
-                        fb = decision.get("feedback", "")
-                        if fb:
-                            messages.append({
-                                "role": "system",
-                                "content": f"[User Decision] Approved with note: {fb}. Proceed.",
-                            })
-                        # Merge: approved calls back with previously safe calls
-                        msg.tool_calls = tool_calls_approved + [tc]
 
                 if msg.tool_calls:
                     messages = await self._handle_tool_calls(agent, msg.tool_calls, messages)

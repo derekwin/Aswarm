@@ -21,7 +21,6 @@ export type TaskExecState =
   | 'decomposing'
   | 'streaming'
   | 'reconnecting'
-  | 'waiting_approval'
   | 'completed'
   | 'failed'
   | 'cancelled';
@@ -43,13 +42,6 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   typing?: boolean;
-  approval?: {
-    subtaskId: string;
-    agentName: string;
-    action: string;
-    reasoning: string;
-    riskLevel: string;
-  };
 }
 
 // ── Agents ──
@@ -102,7 +94,6 @@ export type WSEvent =
   | { type: 'tool_call'; task_id: string; agent_name: string; tool: string; args: string; event_id: number }
   | { type: 'done'; task_id: string; summary?: string; results?: unknown[]; event_id: number }
   | { type: 'progress'; task_id: string; completed: number; total: number; event_id: number }
-  | { type: 'approval_request'; task_id: string; subtask_id: string; agent_name: string; action: string; reasoning: string; risk_level: string; event_id: number }
   | { type: 'error'; task_id: string; msg: string; code?: string; event_id: number }
   | { type: 'catchup_done'; task_id: string }
   | { type: 'pong' };
@@ -117,7 +108,6 @@ export type SSEEvent =
   | { type: 'tool_call'; agent_name: string; tool: string; args: string }
   | { type: 'done'; summary?: string; results?: unknown[] }
   | { type: 'progress'; completed: number; total: number }
-  | { type: 'approval_request'; subtask_id: string; agent_name: string; action: string; reasoning: string; risk_level: string }
   | { type: 'error'; msg: string; code?: string };
 
 // ── Settings ──

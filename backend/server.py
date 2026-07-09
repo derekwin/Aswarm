@@ -126,8 +126,6 @@ from backend.ws_manager import ConnectionManager
 
 manager = ConnectionManager()
 _cancel_flags: dict[str, bool] = {}
-_approval_events: dict[str, asyncio.Event] = {}  # task_id -> event, set when user approves/rejects
-_approval_decisions: dict[str, dict] = {}  # task_id -> {"approved": bool, "feedback": str}
 
 _default_settings = {
     "llm_base_url": os.environ.get("AGENTSWARM_LLM_BASE_URL", "http://localhost:11434/v1"),
@@ -389,26 +387,9 @@ async def websocket_endpoint(ws: WebSocket):
 @app.post("/cancel/{task_id}")
 async def cancel_task(task_id: str):
     _cancel_flags[task_id] = True
-    # Wake up any waiting approval
-    evt = _approval_events.get(task_id)
-    if evt:
-        evt.set()
     await storage.update_task(task_id, "cancelled")
     _push_event(task_id, {"type": "done", "summary": "Task cancelled by user", "results": []})
     return {"ok": True}
-
-
-# ── HITL Approval API ──
-
-@app.post("/api/approve/{task_id}/{subtask_id}")
-async def approve_action(task_id: str, subtask_id: str, approved: bool = Query(default=True), feedback: str = Query(default="")):
-    """Approve or reject an agent's pending approval request."""
-    decision = {"approved": approved, "feedback": feedback, "subtask_id": subtask_id}
-    _approval_decisions[task_id] = decision
-    evt = _approval_events.get(task_id)
-    if evt:
-        evt.set()
-    return {"ok": True, "approved": approved}
 
 
 # ── Trace API ──
@@ -491,7 +472,7 @@ async def _execute_resume(new_task_id: str, original_task_id: str, checkpoint_pa
     """Execute a task resumed from a checkpoint."""
     await execute_resume(new_task_id, original_task_id, checkpoint_path,
         _load_settings=_load_settings, _push_event=_push_event, storage=storage, manager=manager,
-        _cancel_flags=_cancel_flags, _approval_events=_approval_events, _approval_decisions=_approval_decisions)
+        _cancel_flags=_cancel_flags)
 
 
 # ── Rerun API ──
@@ -547,7 +528,7 @@ async def rerun_subtask(task_id: str, subtask_id: str, prompt: str = Query(defau
 async def _execute_task(task_id: str, conv_id: str, query: str, lang: str = "en"):
     await execute_task(task_id, conv_id, query, lang,
         _load_settings=_load_settings, _push_event=_push_event, storage=storage, manager=manager,
-        _cancel_flags=_cancel_flags, _approval_events=_approval_events, _approval_decisions=_approval_decisions,
+        _cancel_flags=_cancel_flags,
         WORKSPACE_ROOT=WORKSPACE_ROOT)
 
 
@@ -580,8 +561,6 @@ async def _periodic_sync(interval_sec: int = 300):
                 task = await storage.get_task(task_id)
                 if not task or task["status"] in ("completed", "failed", "cancelled"):
                     _cancel_flags.pop(task_id, None)
-                    _approval_events.pop(task_id, None)
-                    _approval_decisions.pop(task_id, None)
         except Exception as e:
             logger.warning(f"Periodic sync failed: {e}")
 

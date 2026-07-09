@@ -66,7 +66,7 @@ def _classify_error(e: Exception) -> str:
 async def execute_task(
     task_id: str, conv_id: str, query: str, lang: str,
     *, _load_settings, _push_event, storage, manager,
-    _cancel_flags, _approval_events, _approval_decisions,
+    _cancel_flags,
     WORKSPACE_ROOT,
 ):
     try:
@@ -113,35 +113,12 @@ async def execute_task(
                         "type": "tool_call", "agent_name": data["agent_name"],
                         "tool": data["tool"], "args": arg_preview,
                     })
-                case "approval_request":
-                    _push_event(task_id, {
-                        "type": "approval_request",
-                        "subtask_id": data["subtask_id"], "agent_name": data["agent_name"],
-                        "action": data.get("action", ""), "reasoning": data.get("reasoning", ""),
-                        "risk_level": data.get("risk_level", "medium"),
-                    })
-
-        async def wait_for_approval() -> dict | None:
-            evt = asyncio.Event()
-            _approval_events[task_id] = evt
-            try:
-                while not evt.is_set():
-                    if _cancel_flags.get(task_id):
-                        return None
-                    try:
-                        await asyncio.wait_for(evt.wait(), timeout=300)
-                    except asyncio.TimeoutError:
-                        return {"approved": False, "feedback": "Approval timed out", "subtask_id": ""}
-            finally:
-                _approval_events.pop(task_id, None)
-            return _approval_decisions.pop(task_id, None)
 
         orchestrator = SwarmOrchestrator(
             tools=tools, llm=llm, factory=factory, state_manager=state_manager,
             max_subtask_retries=2,
             on_event=on_event,
             is_cancelled=lambda: _cancel_flags.get(task_id, False),
-            wait_for_approval=wait_for_approval,
         )
 
         _push_event(task_id, {"type": "status", "msg": "Decomposing task..."})
@@ -196,7 +173,7 @@ async def execute_task(
 async def execute_resume(
     new_task_id: str, original_task_id: str, checkpoint_path: str | None,
     *, _load_settings, _push_event, storage, manager,
-    _cancel_flags, _approval_events, _approval_decisions,
+    _cancel_flags,
 ):
     try:
         settings = await _load_settings()
@@ -228,35 +205,12 @@ async def execute_resume(
                         "type": "tool_call", "agent_name": data["agent_name"],
                         "tool": data["tool"], "args": arg_preview,
                     })
-                case "approval_request":
-                    _push_event(new_task_id, {
-                        "type": "approval_request",
-                        "subtask_id": data["subtask_id"], "agent_name": data["agent_name"],
-                        "action": data.get("action", ""), "reasoning": data.get("reasoning", ""),
-                        "risk_level": data.get("risk_level", "medium"),
-                    })
-
-        async def wait_for_approval() -> dict | None:
-            evt = asyncio.Event()
-            _approval_events[new_task_id] = evt
-            try:
-                while not evt.is_set():
-                    if _cancel_flags.get(new_task_id):
-                        return None
-                    try:
-                        await asyncio.wait_for(evt.wait(), timeout=300)
-                    except asyncio.TimeoutError:
-                        return {"approved": False, "feedback": "Approval timed out", "subtask_id": ""}
-            finally:
-                _approval_events.pop(new_task_id, None)
-            return _approval_decisions.pop(new_task_id, None)
 
         orchestrator = SwarmOrchestrator(
             tools=tools, llm=llm, factory=factory, state_manager=state_manager,
             max_subtask_retries=2,
             on_event=on_event,
             is_cancelled=lambda: _cancel_flags.get(new_task_id, False),
-            wait_for_approval=wait_for_approval,
         )
 
         subtask_info = _build_subtask_info(dag)

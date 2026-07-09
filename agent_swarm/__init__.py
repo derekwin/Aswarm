@@ -5,7 +5,6 @@ from agent_swarm.mcp_gateway import MCPGateway, ToolDefinition
 from agent_swarm.meta_scheduler import MetaScheduler, Router
 from agent_swarm.models import (
     AgentConfig,
-    ApprovalRequest,
     DivergenceWarning,
     Subtask,
     SubtaskResult,

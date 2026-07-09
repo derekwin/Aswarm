@@ -3,6 +3,7 @@
 Core flow: classify intent → decompose → validate → TaskDAG
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -155,6 +156,8 @@ class MetaScheduler:
         dag = await scheduler.decompose("Research AI chip market")
     """
 
+    DECOMPOSER_TIMEOUT = 300  # seconds
+
     def __init__(
         self,
         llm: LLMClient,
@@ -304,5 +307,8 @@ class MetaScheduler:
         raise ValueError(f"Failed to parse JSON from LLM output: {raw[:500]}")
 
     async def _call_llm(self, model: str, system_prompt: str, user_prompt: str, temperature: float = 0.3) -> str:
-        msg = await self.llm.chat(model, [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], temperature=temperature)
+        msg = await asyncio.wait_for(
+            self.llm.chat(model, [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], temperature=temperature),
+            timeout=getattr(self, 'DECOMPOSER_TIMEOUT', 300),
+        )
         return (msg.content or "").strip()

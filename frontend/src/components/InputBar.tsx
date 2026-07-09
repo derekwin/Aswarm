@@ -18,7 +18,7 @@ export default function InputBar({ onSend, onStop }: Props) {
 
   const [query, setQuery] = useState('');
   const [sending, setSending] = useState(false);
-  const isExecuting = conv.execState === 'streaming' || conv.execState === 'decomposing' || conv.execState === 'reconnecting' || conv.execState === 'waiting_approval';
+  const isExecuting = conv.execState === 'streaming' || conv.execState === 'decomposing' || conv.execState === 'reconnecting';
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {

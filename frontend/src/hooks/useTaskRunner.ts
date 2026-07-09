@@ -68,24 +68,6 @@ export function useTaskRunner() {
       case 'progress':
         convDispatch({ type: 'SET_PROGRESS', payload: { completed: d.completed, total: d.total } });
         break;
-      case 'approval_request':
-        convDispatch({ type: 'SET_EXEC_STATE', payload: 'waiting_approval' });
-        convDispatch({
-          type: 'APPEND_MSG',
-          payload: {
-            role: 'assistant',
-            content: `**⚠ Approval Required**\n\nAgent **${d.agent_name}** wants to:\n> ${d.action}\n\n**Reasoning:** ${d.reasoning}\n\n**Risk level:** \`${d.risk_level}\``,
-            typing: false,
-            approval: {
-              subtaskId: d.subtask_id,
-              agentName: d.agent_name,
-              action: d.action,
-              reasoning: d.reasoning,
-              riskLevel: d.risk_level,
-            },
-          },
-        });
-        break;
       case 'done':
         uiDispatch({ type: 'SET_CONNECTED', payload: false });
         if (d.summary && d.summary !== 'Task cancelled by user') {
