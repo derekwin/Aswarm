@@ -84,15 +84,33 @@ async def rate_limit_middleware(request: Request, call_next):
     bucket.append(now)
     return await call_next(request)
 
-# Global exception handler to avoid leaking internal details
+# Global exception handler — RFC 7807 Problem Details
 from fastapi.responses import JSONResponse
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "type": "about:blank",
+            "title": "Request Error",
+            "status": exc.status_code,
+            "detail": exc.detail,
+            "instance": str(request.url.path),
+        },
+    )
 
 @app.exception_handler(Exception)
 async def global_exception_handler(_request: Request, exc: Exception):
     logger.exception("Unhandled exception")
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error"},
+        content={
+            "type": "about:blank",
+            "title": "Internal Server Error",
+            "status": 500,
+            "detail": "An unexpected error occurred",
+        },
     )
 
 storage = get_storage()
