@@ -20,8 +20,10 @@ export default function AgentStatusList() {
   const agents = Object.values(conv.agents);
   const hasValidAgents = agents.some(a => a.name && a.name !== '');
   const isDecomposing = conv.execState === 'decomposing';
+  const isStreamingNoAgents = conv.execState === 'streaming' && agents.length === 0;
+  const isConnecting = conv.execState === 'connecting';
 
-  if (isDecomposing && !hasValidAgents) {
+  if ((isDecomposing || isStreamingNoAgents || isConnecting) && !hasValidAgents) {
     return (
       <div className="mt-2 border-t border-border-subtle pt-2 animate-fade-up">
         <div className="flex items-center gap-2 mb-2">

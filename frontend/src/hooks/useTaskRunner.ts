@@ -38,16 +38,18 @@ export function useTaskRunner() {
       case 'catchup_done':
         break;
       case 'status':
-        // Agent cards already show progress — skip redundant status text in chat
+        convDispatch({ type: 'UPDATE_LAST_MSG', payload: { content: d.msg, typing: false } });
         break;
       case 'exec_state':
         convDispatch({ type: 'SET_EXEC_STATE', payload: d.state });
-        // runTask already appended a decomposing/typing message — don't duplicate
+        if (d.state === 'decomposing') {
+          convDispatch({ type: 'UPDATE_LAST_MSG', payload: { content: t('decomposing'), typing: true } });
+        }
         break;
       case 'dag':
         convDispatch({ type: 'SET_DAG', payload: { dag: { intent: d.intent, subtasks: d.subtasks, parallel_groups: d.parallel_groups }, totalAgents: d.subtasks.length } });
         convDispatch({ type: 'SET_EXEC_STATE', payload: 'streaming' });
-        // AgentStatusList in the first assistant bubble already shows agent count
+        convDispatch({ type: 'UPDATE_LAST_MSG', payload: { content: `${d.subtasks.length} agents ready · ${d.intent || 'executing...'}`, typing: false } });
         break;
       case 'agent_start':
         startTimeRef.current[d.subtask_id] = Date.now();
