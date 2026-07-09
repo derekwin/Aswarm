@@ -22,7 +22,7 @@ function AppInner() {
   const { state: conv, dispatch: convDispatch } = useConv();
   const { state: ui, dispatch: uiDispatch } = useUI();
   const { runTask, reconnect, cancelTask, cleanupRefs, handleWSEvent } = useTaskRunner();
-  const { subscribe, registerHandler } = useWebSocket();
+  const { subscribe, registerHandler, unsubscribe } = useWebSocket();
   const { panelWidth, onPanelResize } = usePanelWidth();
   const scrollRef = useRef<HTMLDivElement>(null);
   const loadingConvId = useRef<string | null>(null);
@@ -77,6 +77,7 @@ function AppInner() {
       uiDispatch({ type: 'CLOSE_PANEL' });
     }
     if (isSwitch) {
+      if (conv.taskId) unsubscribe(conv.taskId);
       convDispatch({ type: 'RESET' });
     }
     cleanupRefs();

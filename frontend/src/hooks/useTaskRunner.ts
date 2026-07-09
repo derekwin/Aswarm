@@ -88,9 +88,13 @@ export function useTaskRunner() {
         break;
       case 'done':
         uiDispatch({ type: 'SET_CONNECTED', payload: false });
-        if (d.summary) convDispatch({ type: 'APPEND_MSG', payload: { role: 'assistant', content: d.summary } });
-        convDispatch({ type: 'SET_EXEC_STATE', payload: 'completed' });
-        uiDispatch({ type: 'ADD_TOAST', payload: `✓ ${t('complete')}` });
+        if (d.summary && d.summary !== 'Task cancelled by user') {
+          convDispatch({ type: 'APPEND_MSG', payload: { role: 'assistant', content: d.summary } });
+        }
+        if (execStateRef.current !== 'cancelled') {
+          convDispatch({ type: 'SET_EXEC_STATE', payload: 'completed' });
+          uiDispatch({ type: 'ADD_TOAST', payload: `\u2713 ${t('complete')}` });
+        }
         break;
       case 'error': {
         uiDispatch({ type: 'SET_CONNECTED', payload: false });
