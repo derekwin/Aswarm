@@ -26,6 +26,7 @@ function AppInner() {
   const { panelWidth, onPanelResize } = usePanelWidth();
   const scrollRef = useRef<HTMLDivElement>(null);
   const loadingConvId = useRef<string | null>(null);
+  const lastActiveId = useRef<string | null>(null);
   const execStateRef = useRef(conv.execState);
   useEffect(() => { execStateRef.current = conv.execState; }, [conv.execState]);
 
@@ -55,12 +56,13 @@ function AppInner() {
   // Three-phase recovery: Cache → API diff → SSE reconnect
   useLayoutEffect(() => {
     const activeId = app.activeConvId;
+    const isSwitch = lastActiveId.current !== null && lastActiveId.current !== activeId;
+    lastActiveId.current = activeId;
+
     const execing = execStateRef.current === 'streaming' || execStateRef.current === 'decomposing' || execStateRef.current === 'reconnecting';
     if (execing) {
-      // Cancel without API call (silent), fire-and-forget is safe here
       cancelTask(true);
     }
-    // Close panel on conversation switch — unless the new conv already has agents in cache
     let hasCachedAgents = false;
     if (activeId) {
       try {
@@ -74,7 +76,9 @@ function AppInner() {
     if (!hasCachedAgents) {
       uiDispatch({ type: 'CLOSE_PANEL' });
     }
-    convDispatch({ type: 'RESET' });
+    if (isSwitch) {
+      convDispatch({ type: 'RESET' });
+    }
     cleanupRefs();
     if (!activeId) return;
     loadingConvId.current = activeId;
