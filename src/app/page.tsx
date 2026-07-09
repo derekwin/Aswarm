@@ -130,9 +130,16 @@ export default function Home() {
     <div className="flex h-screen overflow-hidden">
       <Sidebar conversations={convs.data || []} activeId={activeConv}
         onSelect={switchConv}
-        onNew={() => {
+        onNew={async () => {
           esRef.current?.close();
-          setActiveConv(null); setMessages([]); setAgents({}); setExecState("idle");
+          if (!hasConvs) {
+            const c = await createConv.mutateAsync({ title: "New Task" });
+            setActiveConv(c.id);
+            utils.conversation.list.invalidate();
+          } else {
+            setActiveConv(null);
+          }
+          setMessages([]); setAgents({}); setExecState("idle");
         }} />
       <main className="flex-1 flex flex-col min-w-0">
         <header className="h-12 border-b border-zinc-800 flex items-center px-4 shrink-0 glass-heavy">
@@ -140,10 +147,38 @@ export default function Home() {
         </header>
         <div className="flex-1 overflow-y-auto">
           {!hasConvs && !activeConv ? (
-            <div className="flex flex-col items-center justify-center h-full gap-4 text-zinc-500">
-              <div className="text-4xl">⚡</div>
+            <div className="flex flex-col items-center justify-center h-full gap-6 text-zinc-500">
+              <div className="w-16 h-16 flex items-center justify-center text-3xl bg-zinc-800 border border-zinc-700 rounded-xl">⚡</div>
               <h2 className="text-xl font-bold text-zinc-300">What do you want to research?</h2>
               <p className="text-base">Describe your task to get started.</p>
+              <div className="flex gap-2 max-w-md w-full mt-2">
+                <input
+                  id="quickInput"
+                  placeholder="Describe your task..."
+                  className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-500"
+                  onKeyDown={async e => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      const q = (e.target as HTMLInputElement).value.trim();
+                      if (!q) return;
+                      const c = await createConv.mutateAsync({ title: q.slice(0, 40) });
+                      setActiveConv(c.id); utils.conversation.list.invalidate();
+                      (e.target as HTMLInputElement).value = "";
+                      handleSubmit(q);
+                    }
+                  }}
+                />
+                <button onClick={async () => {
+                  const el = document.getElementById("quickInput") as HTMLInputElement;
+                  const q = el?.value.trim();
+                  if (!q) return;
+                  const c = await createConv.mutateAsync({ title: q.slice(0, 40) });
+                  setActiveConv(c.id); utils.conversation.list.invalidate();
+                  el.value = "";
+                  handleSubmit(q);
+                }} className="px-5 py-2.5 bg-accent text-white text-sm font-medium rounded-lg hover:brightness-110 transition-all">
+                  Send
+                </button>
+              </div>
             </div>
           ) : loading ? (
             <div className="flex items-center justify-center h-full">
