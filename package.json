@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -H 0.0.0.0 -p 8000",
+    "worker": "python agent_swarm/worker.py",
+    "start:all": "npm run build && concurrently \"npm start\" \"npm run worker\"",
     "lint": "eslint"
   },
   "dependencies": {
