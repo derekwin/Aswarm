@@ -112,13 +112,21 @@ async def decompose(query: str = Query(...), lang: str = Query(default="en")):
 
 # ── Execution ──
 
+DEFAULT_MODEL_MAP = {
+    "web_searcher": "qwen3:4b",
+    "data_analyst": "qwen3:8b",
+    "coder": "qwen3:8b",
+    "writer": "qwen3:4b",
+    "reviewer": "qwen3.5:35b",
+}
+
 @app.post("/execute")
 async def execute_task(query: str = Query(...), task_id: str = Query(...), lang: str = Query(default="en")):
     """Execute a decomposed task. Starts SSE event stream internally."""
     settings = await _load_settings()
     tools = ToolRegistry()
     llm = LLMClient(base_url=settings["llm_base_url"], api_key=settings["llm_api_key"])
-    factory = AgentFactory(available_tools=set(tools.available_tools()), default_model=settings["default_model"])
+    factory = AgentFactory(available_tools=set(tools.available_tools()), default_model=settings["default_model"], model_map=DEFAULT_MODEL_MAP)
     state_manager = StateManager(checkpoint_dir="./checkpoints")
     budget = BudgetTracker(token_limit=int(settings.get("budget_token_limit", 200000)))
     llm.set_budget(budget)

@@ -47,14 +47,19 @@ class AgentFactory:
     - 克隆 Agent 模板
     """
 
-    def __init__(self, available_tools: set[str], default_model: str = "qwen3-8b"):
+    def __init__(self, available_tools: set[str], default_model: str = "qwen3:8b",
+                 model_map: dict[str, str] | None = None):
         self._available_tools = available_tools
         self.default_model = default_model
+        self._model_map = model_map or {}
 
     def create(self, config: AgentConfig) -> Agent:
         """根据配置创建 Agent 实例。"""
-        # 解析模型: "default" → 使用默认模型
-        model = config.model if config.model != "default" else self.default_model
+        # Resolve model: "default" → role-specific model → default_model
+        if config.model == "default":
+            model = self._model_map.get(config.role, self.default_model)
+        else:
+            model = config.model
 
         # 校验工具: 只保留已注册的工具
         valid_tools = [t for t in config.tools if t in self._available_tools]
