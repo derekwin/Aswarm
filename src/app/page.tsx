@@ -38,6 +38,7 @@ type Agent = {
   subtaskId: string;
   output?: string;
   error?: string;
+  retries?: number;
 };
 
 type Message = {
@@ -156,7 +157,10 @@ export default function Home() {
             });
             break;
           case "agent_start":
-            setAgents(prev => ({ ...prev, [d.subtask_id]: { name: d.agent_name, role: d.role, state: "running", subtaskId: d.subtask_id } }));
+            setAgents(prev => {
+              const existing = prev[d.subtask_id];
+              return { ...prev, [d.subtask_id]: { name: d.agent_name, role: d.role, state: "running", subtaskId: d.subtask_id, retries: existing?.state === "failed" ? (existing.retries ?? 0) + 1 : (existing?.retries ?? 0) } };
+            });
             break;
           case "agent_done":
             setAgents(prev => ({ ...prev, [d.subtask_id]: { ...prev[d.subtask_id], state: d.state, output: d.output, error: d.error } }));
@@ -358,9 +362,6 @@ export default function Home() {
           <h1 className="font-semibold text-sm">AgentSwarm</h1>
           <span className={`w-1.5 h-1.5 rounded-full ml-2 ${workerOnline ? "bg-green-400" : "bg-red-400 animate-pulse"}`} title={workerOnline ? "Worker online" : "Worker offline"} />
           <div className="ml-auto flex items-center gap-1">
-            {activeConv && Object.keys(agents).length > 0 && (
-              <button onClick={() => setShowFiles(!showFiles)} className={`px-2 py-1 text-xs rounded ${showFiles ? "bg-zinc-700 text-zinc-200" : "text-zinc-500 hover:text-zinc-300"}`}>📂</button>
-            )}
             <button onClick={() => setShowSettings(!showSettings)} className="px-2 py-1 text-xs text-zinc-500 hover:text-zinc-300">⚙</button>
           </div>
         </header>
@@ -405,14 +406,13 @@ export default function Home() {
                     {showTracker && (
                       <>
                         {progress && totalAgents > 0 && <ProgressBar completed={completedAgents} total={totalAgents} />}
-                        <AgentTracker agents={agents} execState={execState} onAgentClick={setDetailAgent} />
+                        <AgentTracker agents={agents} execState={execState} onAgentClick={setDetailAgent} onFilesClick={() => setShowFiles(true)} />
                       </>
                     )}
                   </ChatMessage>
                 );
               })}
               {detailAgent && taskId && <AgentDetailPanel agent={detailAgent} taskId={taskId} onClose={() => setDetailAgent(null)} />}
-              {showFiles && activeConv && <FilesPanel convId={activeConv} onClose={() => setShowFiles(false)} />}
             </div>
           )}
         </div>
@@ -423,6 +423,7 @@ export default function Home() {
       </main>
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {showFiles && activeConv && <FilesPanel convId={activeConv} onClose={() => setShowFiles(false)} />}
       {toast && (
         <div className="fixed bottom-6 right-6 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-sm text-zinc-200 shadow-lg animate-fade-up z-50">
           {toast}
