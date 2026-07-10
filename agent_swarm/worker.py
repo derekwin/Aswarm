@@ -122,7 +122,24 @@ DEFAULT_MODEL_MAP = {
 
 @app.post("/execute")
 async def execute_task(query: str = Query(...), task_id: str = Query(...), lang: str = Query(default="en")):
-    """Execute a decomposed task. Starts SSE event stream internally."""
+    """Start task execution in background. Events streamed via /events/{task_id}."""
+    _event_queues[task_id] = asyncio.Queue()
+    task = asyncio.ensure_future(_run_task(task_id, query, lang))
+    task.add_done_callback(lambda t: logger.error(f"Task {task_id} crashed: {t.exception()}") if t.exception() else None)
+    # Push initial event immediately so clients know the task has started
+    _push_event(task_id, {"type": "exec_state", "state": "decomposing"})
+    return {"task_id": task_id, "status": "started"}
+
+
+async def _run_task(task_id: str, query: str, lang: str):
+    try:
+        await _do_run_task(task_id, query, lang)
+    except Exception as e:
+        logger.exception(f"Task {task_id} failed")
+        _push_event(task_id, {"type": "error", "msg": str(e), "code": "INTERNAL_ERROR"})
+
+
+async def _do_run_task(task_id: str, query: str, lang: str):
     settings = await _load_settings()
     tools = ToolRegistry()
     llm = LLMClient(base_url=settings["llm_base_url"], api_key=settings["llm_api_key"])
@@ -131,9 +148,6 @@ async def execute_task(query: str = Query(...), task_id: str = Query(...), lang:
     budget = BudgetTracker(token_limit=int(settings.get("budget_token_limit", 200000)))
     llm.set_budget(budget)
 
-    _event_queues[task_id] = asyncio.Queue()
-
-    # Decompose
     scheduler = MetaScheduler(
         llm=llm, decomposer_model=settings["decomposer_model"],
         available_tools=list(tools.available_tools()),
