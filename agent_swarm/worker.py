@@ -56,7 +56,21 @@ _default_settings = {
 
 
 async def _load_settings():
-    return dict(_default_settings)
+    """Load settings: DB overrides env defaults."""
+    settings = dict(_default_settings)
+    try:
+        import aiosqlite
+        db_path = os.path.join(os.environ.get("AGENTSWARM_DATA_DIR", "data"), "agentswarm.db")
+        if os.path.exists(db_path):
+            async with aiosqlite.connect(db_path) as db:
+                cursor = await db.execute("SELECT key, value FROM settings")
+                rows = await cursor.fetchall()
+                for key, value in rows:
+                    if key in settings and value is not None:
+                        settings[key] = value
+    except Exception:
+        pass  # DB not available, use defaults
+    return settings
 
 
 # ── Helpers ──
