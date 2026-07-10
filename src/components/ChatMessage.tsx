@@ -5,9 +5,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 
-export function ChatMessage({ role, content, typing, onEdit }: {
+export function ChatMessage({ role, content, typing, onEdit, children }: {
   role: string; content: string; typing?: boolean; id?: number;
   onEdit?: (text: string) => void;
+  children?: React.ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(content);
@@ -47,8 +48,9 @@ export function ChatMessage({ role, content, typing, onEdit }: {
         <div className={`msg-bubble rounded-lg px-3 py-2 text-sm ${isUser ? "bg-blue-600 text-white ml-auto max-w-[80%]" : "bg-zinc-800 text-zinc-200 max-w-[85%]"}`}>
           {typing ? <span className="typing text-zinc-400">{content}</span> :
            isUser ? <div className="whitespace-pre-wrap">{content}</div> :
-           <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>{content}</ReactMarkdown>}
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>{content}</ReactMarkdown>}
         </div>
+        {children && <div className="mt-2">{children}</div>}
         <div className={`flex gap-2 mt-0.5 px-1 opacity-0 group-hover:opacity-100 transition-opacity ${isUser ? "justify-end" : ""}`}>
           {isUser && onEdit && <button onClick={() => { setEditing(true); setEditText(content); }} className="text-[11px] text-zinc-500 hover:text-accent">Edit</button>}
           {!isUser && <button onClick={() => navigator.clipboard.writeText(content)} className="text-[11px] text-zinc-500 hover:text-accent">Copy</button>}

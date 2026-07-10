@@ -386,9 +386,19 @@ export default function Home() {
             </div>
           ) : (
             <div className="max-w-3xl mx-auto p-4 space-y-4" ref={scrollRef}>
-              {execState !== "idle" && <AgentTracker agents={agents} execState={execState} onAgentClick={setDetailAgent} />}
-              {progress && totalAgents > 0 && <ProgressBar completed={completedAgents} total={totalAgents} />}
-              {messages.map((m, i) => <ChatMessage key={m.id || i} {...m} onEdit={handleEdit} />)}
+              {messages.map((m, i) => {
+                const isFirstAssistant = m.role === "assistant" && messages.findIndex(x => x.role === "assistant") === i;
+                return (
+                  <ChatMessage key={m.id || i} {...m} onEdit={handleEdit}>
+                    {isFirstAssistant && execState !== "idle" && (
+                      <>
+                        {progress && totalAgents > 0 && <ProgressBar completed={completedAgents} total={totalAgents} />}
+                        <AgentTracker agents={agents} execState={execState} onAgentClick={setDetailAgent} />
+                      </>
+                    )}
+                  </ChatMessage>
+                );
+              })}
               {detailAgent && taskId && <AgentDetailPanel agent={detailAgent} taskId={taskId} onClose={() => setDetailAgent(null)} />}
               {showFiles && activeConv && <FilesPanel convId={activeConv} onClose={() => setShowFiles(false)} />}
             </div>
