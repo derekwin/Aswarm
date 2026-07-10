@@ -192,17 +192,20 @@ async def _do_run_task(task_id: str, query: str, lang: str):
     async def on_event(event_type: str, data: dict):
         match event_type:
             case "agent_start":
+                trace.record("agent_start", task_id, subtask_id=data["subtask_id"], agent_name=data["agent_name"])
                 _push_event(task_id, {
                     "type": "agent_start", "subtask_id": data["subtask_id"],
                     "agent_name": data["agent_name"], "role": data.get("role", ""),
                 })
             case "agent_done":
+                trace.record("agent_done", task_id, subtask_id=data["subtask_id"], data={"state": data["state"], "retries": data.get("retry_count", 0)})
                 _push_event(task_id, {
                     "type": "agent_done", "subtask_id": data["subtask_id"],
                     "state": data["state"], "output": data.get("output", ""),
                     "error": data.get("error"), "retry_count": data.get("retry_count", 0),
                 })
             case "tool_call":
+                trace.record("tool_call", task_id, agent_name=data["agent_name"], data={"tool": data["tool"]})
                 arg_preview = json.dumps(data.get("args", {}), ensure_ascii=False)[:200]
                 _push_event(task_id, {
                     "type": "tool_call", "agent_name": data["agent_name"],
@@ -225,6 +228,7 @@ async def _do_run_task(task_id: str, query: str, lang: str):
     except Exception as e:
         _push_event(task_id, {"type": "error", "msg": str(e), "code": _classify_error(e)})
     finally:
+        trace.flush(task_id)
         await asyncio.sleep(5)
 
     return {"task_id": task_id, "status": "completed" if "summary" in locals() else "error"}
