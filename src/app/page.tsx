@@ -67,6 +67,7 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [workerOnline, setWorkerOnline] = useState(true);
+  const [activeTrackerIdx, setActiveTrackerIdx] = useState(-1);
 
   // Refs
   const eventSource = useRef<EventSource | null>(null);
@@ -234,6 +235,7 @@ export default function Home() {
 
     setMessages(prev => [...prev, { role: "user", content: query, id: Date.now() }]);
     setMessages(prev => [...prev, { role: "assistant", content: t("decomposing"), typing: true, id: Date.now() + 1 }]);
+    setActiveTrackerIdx(messages.length + 1); // the assistant msg we just added
     setExecState("connecting");
     setAgents({});
     setProgress(null);
@@ -343,7 +345,7 @@ export default function Home() {
               setActiveConv(null);
               document.title = "AgentSwarm";
             }
-            setMessages([]); setAgents({}); setExecState("idle"); setProgress(null);
+            setMessages([]); setAgents({}); setExecState("idle"); setProgress(null); setActiveTrackerIdx(-1);
           }}
         />
       </div>
@@ -398,10 +400,10 @@ export default function Home() {
           ) : (
             <div className="max-w-3xl mx-auto p-4 space-y-4" ref={scrollRef}>
               {messages.map((m, i) => {
-                const isFirstAssistant = m.role === "assistant" && messages.findIndex(x => x.role === "assistant") === i;
+                const showTracker = i === activeTrackerIdx && m.role === "assistant" && execState !== "idle";
                 return (
                   <ChatMessage key={m.id || i} {...m} onEdit={handleEdit}>
-                    {isFirstAssistant && execState !== "idle" && (
+                    {showTracker && (
                       <>
                         {progress && totalAgents > 0 && <ProgressBar completed={completedAgents} total={totalAgents} />}
                         <AgentTracker agents={agents} execState={execState} onAgentClick={setDetailAgent} />
