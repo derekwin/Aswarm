@@ -78,7 +78,17 @@ export default function Home() {
   // ── Data fetching ──
 
   const refreshConvs = useCallback(async () => {
-    try { setConvs(await get("/api/conversations")); } catch (e) { console.error("Failed to load conversations:", e); }
+    try {
+      const data = await get("/api/conversations");
+      setConvs(data);
+      // Auto-restore last active conversation
+      if (data.length > 0 && !activeConv) {
+        const lastId = localStorage.getItem("lastConvId");
+        if (lastId && data.find((c: { id: string }) => c.id === lastId)) {
+          switchConversation(lastId);
+        }
+      }
+    } catch (e) { console.error("Failed to load conversations:", e); }
   }, []);
   useEffect(() => { refreshConvs(); }, [refreshConvs]);
 
@@ -255,6 +265,7 @@ export default function Home() {
     clearTimeout(reconnectTimer.current);
     setActiveConv(id);
     setLoading(true);
+    localStorage.setItem("lastConvId", id);
     setMessages([]);
     setAgents({});
     setExecState("idle");
