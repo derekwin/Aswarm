@@ -171,9 +171,9 @@ export default function Home() {
           case "done":
             if (d.summary) {
               setMessages(prev => [...prev, { role: "assistant", content: d.summary, id: Date.now() }]);
-              // Persist to DB so it survives refresh
               if (activeConv) post("/api/messages", { conversationId: activeConv, role: "assistant", content: d.summary }).catch(() => {});
             }
+            if (taskId) fetch(`/api/tasks/${taskId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "completed" }) }).catch(() => {});
             setExecState("completed");
             es.close();
             showToast("✓ " + t("complete"));
@@ -185,6 +185,7 @@ export default function Home() {
               if (last?.role === "assistant") msgs[msgs.length - 1] = { ...last, content: `**Error**: ${d.msg}`, typing: false };
               return msgs;
             });
+            if (taskId) fetch(`/api/tasks/${taskId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "failed" }) }).catch(() => {});
             setExecState("failed");
             es.close();
             showToast("✗ " + t("failed"));
