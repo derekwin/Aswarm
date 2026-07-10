@@ -1,0 +1,5 @@
+{"timestamp": 1783673177.3705451, "event_type": "agent_start", "task_id": "task_1783673138359", "subtask_id": "t1", "agent_name": "商业模式搜索员", "data": {"role": "web_searcher"}}
+{"timestamp": 1783673177.3711224, "event_type": "agent_start", "task_id": "task_1783673138359", "subtask_id": "t2", "agent_name": "政策分析员", "data": {"role": "web_searcher"}}
+{"timestamp": 1783673177.371489, "event_type": "agent_start", "task_id": "task_1783673138359", "subtask_id": "t3", "agent_name": "竞争分析员", "data": {"role": "web_searcher"}}
+{"timestamp": 1783673183.0865495, "event_type": "tool_call", "task_id": "task_1783673138359", "subtask_id": "", "agent_name": "商业模式搜索员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783673186.510539, "event_type": "tool_call", "task_id": "task_1783673138359", "subtask_id": "", "agent_name": "政策分析员", "data": {"tool": "search_engine"}}

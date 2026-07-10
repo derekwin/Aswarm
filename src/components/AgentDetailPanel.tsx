@@ -64,7 +64,9 @@ export function AgentDetailPanel({ agent, taskId, onClose }: {
                     const retries = d.retries as number | undefined;
                     info = `${(d.state as string) || ""}${retries ? ` · retry #${retries}` : ""}`;
                   } else if (evt.event_type === "tool_call") {
-                    info = `🔧 ${(d.tool as string) || ""}`;
+                    const tool = (d.tool as string) || "";
+                    const args = (d.args as string) || "";
+                    info = `🔧 ${tool}${args ? ": " + args : ""}`;
                   }
                   return (
                     <div key={i} className="p-1.5 rounded text-xs flex items-start gap-2">

@@ -206,7 +206,7 @@ async def _do_run_task(task_id: str, query: str, lang: str):
                 })
                 trace.flush(task_id, clear=False)
             case "tool_call":
-                trace.record("tool_call", task_id, agent_name=data["agent_name"], data={"tool": data["tool"]})
+                trace.record("tool_call", task_id, agent_name=data["agent_name"], data={"tool": data["tool"], "args": str(data.get("args", ""))[:100]})
                 arg_preview = json.dumps(data.get("args", {}), ensure_ascii=False)[:200]
                 _push_event(task_id, {
                     "type": "tool_call", "agent_name": data["agent_name"],
