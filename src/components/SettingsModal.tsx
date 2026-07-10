@@ -6,12 +6,24 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [model, setModel] = useState(() => localStorage.getItem("model") || "qwen3:8b");
   const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "dark");
   const [lang, setLang] = useState(() => localStorage.getItem("lang") || "en");
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const save = () => {
+  const save = async () => {
+    setSaving(true);
     localStorage.setItem("model", model);
     localStorage.setItem("theme", theme);
     localStorage.setItem("lang", lang);
+
+    try {
+      await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decomposer_model: model, default_model: model }),
+      });
+    } catch { /* best effort */ }
+
+    setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
   };
@@ -40,8 +52,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         </select>
 
         <div className="flex gap-2 pt-2">
-          <button onClick={save} className="flex-1 py-2 bg-accent text-white text-sm rounded-lg hover:brightness-110 transition-all">
-            {saved ? "✓ Saved" : "Save"}
+          <button onClick={save} disabled={saving}
+            className="flex-1 py-2 bg-accent text-white text-sm rounded-lg hover:brightness-110 transition-all disabled:opacity-50">
+            {saving ? "Saving..." : saved ? "✓ Saved" : "Save"}
           </button>
           <button onClick={onClose} className="px-4 py-2 bg-zinc-700 text-zinc-300 text-sm rounded-lg hover:bg-zinc-600">Close</button>
         </div>
