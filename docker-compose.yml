@@ -1,0 +1,28 @@
+version: "3.8"
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=file:./dev.db
+      - AGENTSWARM_WORKER_URL=http://worker:8001
+    depends_on:
+      - worker
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./data:/app/data
+      - ./checkpoints:/app/checkpoints
+    environment:
+      - AGENTSWARM_LLM_BASE_URL=http://host.docker.internal:11434/v1
+      - AGENTSWARM_LLM_API_KEY=ollama
+      - AGENTSWARM_DECOMPOSER_MODEL=${DECOMPOSER_MODEL:-qwen3:8b}
+      - AGENTSWARM_DEFAULT_MODEL=${DEFAULT_MODEL:-qwen3:8b}
+    restart: unless-stopped

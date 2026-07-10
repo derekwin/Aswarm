@@ -66,6 +66,7 @@ export default function Home() {
   const [showSettings, setShowSettings] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [workerOnline, setWorkerOnline] = useState(true);
 
   // Refs
   const eventSource = useRef<EventSource | null>(null);
@@ -80,6 +81,18 @@ export default function Home() {
     try { setConvs(await get("/api/conversations")); } catch (e) { console.error("Failed to load conversations:", e); }
   }, []);
   useEffect(() => { refreshConvs(); }, [refreshConvs]);
+
+  // Health check: ping Python worker every 30s
+  useEffect(() => {
+    const check = () => {
+      fetch(`http://${window.location.hostname}:8001/health`)
+        .then(r => setWorkerOnline(r.ok))
+        .catch(() => setWorkerOnline(false));
+    };
+    check();
+    const interval = setInterval(check, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // ── Toast ──
 
@@ -331,6 +344,7 @@ export default function Home() {
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           </button>
           <h1 className="font-semibold text-sm">AgentSwarm</h1>
+          <span className={`w-1.5 h-1.5 rounded-full ml-2 ${workerOnline ? "bg-green-400" : "bg-red-400 animate-pulse"}`} title={workerOnline ? "Worker online" : "Worker offline"} />
           <div className="ml-auto flex items-center gap-1">
             {activeConv && Object.keys(agents).length > 0 && (
               <button onClick={() => setShowFiles(!showFiles)} className={`px-2 py-1 text-xs rounded ${showFiles ? "bg-zinc-700 text-zinc-200" : "text-zinc-500 hover:text-zinc-300"}`}>📂</button>
