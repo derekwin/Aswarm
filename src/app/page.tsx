@@ -222,24 +222,21 @@ export default function Home() {
   // ── Actions ──
 
   const handleSubmit = async (query: string) => {
+    // Show messages immediately — API calls happen in background
+    setMessages(prev => [...prev, { role: "user", content: query, id: Date.now() }]);
+    setMessages(prev => [...prev, { role: "assistant", content: t("decomposing"), typing: true, id: Date.now() + 1 }]);
+    setActiveTrackerIdx(messages.length + 1);
+    setExecState("connecting");
+    setAgents({}); setProgress(null); setDetailAgent(null);
+
     let convId = activeConv;
     if (!convId) {
       try {
         const conv = await post("/api/conversations", { title: query.slice(0, 40) });
-        convId = conv.id;
-        setActiveConv(convId);
-        refreshConvs();
+        convId = conv.id; setActiveConv(convId); refreshConvs();
       } catch (e) { console.error("Failed to create conversation:", e); return; }
     }
     if (!convId) return;
-
-    setMessages(prev => [...prev, { role: "user", content: query, id: Date.now() }]);
-    setMessages(prev => [...prev, { role: "assistant", content: t("decomposing"), typing: true, id: Date.now() + 1 }]);
-    setActiveTrackerIdx(messages.length + 1); // the assistant msg we just added
-    setExecState("connecting");
-    setAgents({});
-    setProgress(null);
-    setDetailAgent(null);
 
     try {
       const result = await post("/api/tasks", { query, convId, lang: localStorage.getItem("lang") || "en" });
