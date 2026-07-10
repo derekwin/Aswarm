@@ -6,11 +6,12 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 
 type Agent = { name: string; role: string; state: string; subtaskId: string; output?: string; error?: string };
+type TraceEvent = { event_type: string; agent_name?: string; subtask_id?: string; data: Record<string, unknown> };
 
 export function AgentDetailPanel({ agent, taskId, onClose }: {
   agent: Agent; taskId: string | null; onClose: () => void;
 }) {
-  const [trace, setTrace] = useState<{ event_type: string; data: Record<string, unknown> }[]>([]);
+  const [trace, setTrace] = useState<TraceEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -57,7 +58,10 @@ export function AgentDetailPanel({ agent, taskId, onClose }: {
                 {trace.map((evt, i) => (
                   <div key={i} className="p-2 bg-zinc-800 rounded text-xs">
                     <span className="text-accent font-mono">{evt.event_type}</span>
-                    <span className="text-zinc-500 ml-2">{JSON.stringify(evt.data).slice(0, 80)}</span>
+                    {evt.agent_name && <span className="text-zinc-300 ml-1">({evt.agent_name})</span>}
+                    {Object.keys(evt.data).length > 0 && (
+                      <span className="text-zinc-500 ml-2">{JSON.stringify(evt.data).slice(0, 80)}</span>
+                    )}
                   </div>
                 ))}
               </div>

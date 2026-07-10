@@ -191,7 +191,7 @@ async def _do_run_task(task_id: str, query: str, lang: str):
     async def on_event(event_type: str, data: dict):
         match event_type:
             case "agent_start":
-                trace.record("agent_start", task_id, subtask_id=data["subtask_id"], agent_name=data["agent_name"])
+                trace.record("agent_start", task_id, subtask_id=data["subtask_id"], agent_name=data["agent_name"], data={"role": data.get("role", "")})
                 _push_event(task_id, {
                     "type": "agent_start", "subtask_id": data["subtask_id"],
                     "agent_name": data["agent_name"], "role": data.get("role", ""),
