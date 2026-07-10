@@ -130,6 +130,20 @@ export default function Home() {
               <div className="w-16 h-16 flex items-center justify-center text-3xl bg-zinc-800 border border-zinc-700 rounded-xl">⚡</div>
               <h2 className="text-xl font-bold text-zinc-300">{t("emptyTitle")}</h2>
               <p className="text-base">{t("emptyDesc")}</p>
+              <div className="flex flex-wrap gap-3 justify-center max-w-2xl mt-1">
+                {[
+                  { icon: "🔬", title: "Market Research", query: "Research the 2025 domestic AI chip market including market share, major vendors, product lines, and policy environment" },
+                  { icon: "💻", title: "Code Generation", query: "Write a Python scraper to crawl Douban Movie Top 250, extract ranking, title, rating, review count, and save as CSV" },
+                  { icon: "📊", title: "Tech Comparison", query: "Compare React vs Vue ecosystems, performance, community activity, and trends in 2025" },
+                ].map(ex => (
+                  <button key={ex.title} onClick={() => hs(ex.query)}
+                    className="flex flex-col items-center gap-2 p-4 bg-zinc-800 border border-zinc-700 rounded-xl w-44 hover:border-accent hover:scale-[1.02] transition-all text-left group">
+                    <span className="text-2xl">{ex.icon}</span>
+                    <span className="text-xs font-semibold text-zinc-300 group-hover:text-accent">{ex.title}</span>
+                    <span className="text-[10px] text-zinc-500 line-clamp-2">{ex.query.slice(0, 60)}...</span>
+                  </button>
+                ))}
+              </div>
               <div className="flex gap-2 max-w-md w-full mt-2">
                 <input id="qi" placeholder={t("taskPlaceholder")} className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-500"
                   onKeyDown={e=>{if(e.key==="Enter"){const v=(e.target as HTMLInputElement).value.trim();if(v)hs(v)}}}/>
