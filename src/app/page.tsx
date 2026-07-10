@@ -53,6 +53,7 @@ export default function Home() {
   const [showSettings, setShowSettings] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [clickCount, setClickCount] = useState(0);
 
   const esRef = useRef<EventSource | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -202,6 +203,9 @@ export default function Home() {
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           </button>
           <h1 className="font-semibold text-sm">AgentSwarm</h1>
+          <button onClick={() => setClickCount(c => c + 1)} className="ml-2 px-2 py-1 bg-zinc-700 rounded text-xs text-zinc-300">
+            Test {clickCount}
+          </button>
           <div className="ml-auto flex items-center gap-1">
             {activeConv && Object.keys(agents).length > 0 && (
               <button onClick={() => setShowFiles(!showFiles)} className={`px-2 py-1 text-xs rounded ${showFiles ? "bg-zinc-700 text-zinc-200" : "text-zinc-500 hover:text-zinc-300"}`}>📂</button>
