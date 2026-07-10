@@ -1,0 +1,6 @@
+{"timestamp": 1783670943.2105222, "event_type": "agent_start", "task_id": "task_1783670905919", "subtask_id": "t1", "agent_name": "商业模式搜索员", "data": {}}
+{"timestamp": 1783670948.4109433, "event_type": "tool_call", "task_id": "task_1783670905919", "subtask_id": "", "agent_name": "商业模式搜索员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783670962.8230479, "event_type": "tool_call", "task_id": "task_1783670905919", "subtask_id": "", "agent_name": "商业模式搜索员", "data": {"tool": "webfetch"}}
+{"timestamp": 1783670975.6673317, "event_type": "tool_call", "task_id": "task_1783670905919", "subtask_id": "", "agent_name": "商业模式搜索员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783670987.3712726, "event_type": "tool_call", "task_id": "task_1783670905919", "subtask_id": "", "agent_name": "商业模式搜索员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783671020.6712308, "event_type": "agent_done", "task_id": "task_1783670905919", "subtask_id": "t1", "agent_name": "", "data": {"state": "completed", "retries": 0}}
