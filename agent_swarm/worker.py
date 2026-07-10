@@ -134,10 +134,10 @@ async def decompose(query: str = Query(...), lang: str = Query(default="en")):
 # ── Execution ──
 
 DEFAULT_MODEL_MAP = {
-    "web_searcher": "qwen3:4b",
+    "web_searcher": "qwen3:8b",
     "data_analyst": "qwen3:8b",
     "coder": "qwen3:8b",
-    "writer": "qwen3:4b",
+    "writer": "qwen3:8b",
     "reviewer": "qwen3.5:35b",
 }
 

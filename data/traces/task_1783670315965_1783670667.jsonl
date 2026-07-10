@@ -1,0 +1,23 @@
+{"timestamp": 1783670392.1171978, "event_type": "agent_start", "task_id": "task_1783670315965", "subtask_id": "t1", "agent_name": "滴滴商业模式搜索员", "data": {}}
+{"timestamp": 1783670414.0414145, "event_type": "tool_call", "task_id": "task_1783670315965", "subtask_id": "", "agent_name": "滴滴商业模式搜索员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783670424.916881, "event_type": "tool_call", "task_id": "task_1783670315965", "subtask_id": "", "agent_name": "滴滴商业模式搜索员", "data": {"tool": "webfetch"}}
+{"timestamp": 1783670430.7217615, "event_type": "tool_call", "task_id": "task_1783670315965", "subtask_id": "", "agent_name": "滴滴商业模式搜索员", "data": {"tool": "webfetch"}}
+{"timestamp": 1783670443.2151527, "event_type": "tool_call", "task_id": "task_1783670315965", "subtask_id": "", "agent_name": "滴滴商业模式搜索员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783670456.6003556, "event_type": "tool_call", "task_id": "task_1783670315965", "subtask_id": "", "agent_name": "滴滴商业模式搜索员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783670456.7970994, "event_type": "agent_done", "task_id": "task_1783670315965", "subtask_id": "t1", "agent_name": "", "data": {"state": "failed", "retries": 0}}
+{"timestamp": 1783670456.8012242, "event_type": "agent_start", "task_id": "task_1783670315965", "subtask_id": "t1", "agent_name": "滴滴商业模式搜索员", "data": {}}
+{"timestamp": 1783670468.2266233, "event_type": "tool_call", "task_id": "task_1783670315965", "subtask_id": "", "agent_name": "滴滴商业模式搜索员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783670482.4633472, "event_type": "tool_call", "task_id": "task_1783670315965", "subtask_id": "", "agent_name": "滴滴商业模式搜索员", "data": {"tool": "webfetch"}}
+{"timestamp": 1783670499.1988735, "event_type": "tool_call", "task_id": "task_1783670315965", "subtask_id": "", "agent_name": "滴滴商业模式搜索员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783670515.9485269, "event_type": "tool_call", "task_id": "task_1783670315965", "subtask_id": "", "agent_name": "滴滴商业模式搜索员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783670540.8137047, "event_type": "tool_call", "task_id": "task_1783670315965", "subtask_id": "", "agent_name": "滴滴商业模式搜索员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783670541.0105069, "event_type": "agent_done", "task_id": "task_1783670315965", "subtask_id": "t1", "agent_name": "", "data": {"state": "failed", "retries": 0}}
+{"timestamp": 1783670541.015043, "event_type": "agent_start", "task_id": "task_1783670315965", "subtask_id": "t1", "agent_name": "滴滴商业模式搜索员", "data": {}}
+{"timestamp": 1783670554.75581, "event_type": "tool_call", "task_id": "task_1783670315965", "subtask_id": "", "agent_name": "滴滴商业模式搜索员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783670577.0389154, "event_type": "tool_call", "task_id": "task_1783670315965", "subtask_id": "", "agent_name": "滴滴商业模式搜索员", "data": {"tool": "webfetch"}}
+{"timestamp": 1783670586.9170206, "event_type": "tool_call", "task_id": "task_1783670315965", "subtask_id": "", "agent_name": "滴滴商业模式搜索员", "data": {"tool": "webfetch"}}
+{"timestamp": 1783670600.8927467, "event_type": "tool_call", "task_id": "task_1783670315965", "subtask_id": "", "agent_name": "滴滴商业模式搜索员", "data": {"tool": "webfetch"}}
+{"timestamp": 1783670612.895508, "event_type": "tool_call", "task_id": "task_1783670315965", "subtask_id": "", "agent_name": "滴滴商业模式搜索员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783670613.0940187, "event_type": "agent_done", "task_id": "task_1783670315965", "subtask_id": "t1", "agent_name": "", "data": {"state": "failed", "retries": 0}}
+{"timestamp": 1783670620.7695198, "event_type": "agent_start", "task_id": "task_1783670315965", "subtask_id": "t1", "agent_name": "滴滴商业模式分析师", "data": {}}
+{"timestamp": 1783670667.4606795, "event_type": "agent_done", "task_id": "task_1783670315965", "subtask_id": "t1", "agent_name": "", "data": {"state": "completed", "retries": 0}}
