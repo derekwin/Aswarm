@@ -14,8 +14,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const task = db.select({ id: tasks.id }).from(tasks).where(eq(tasks.conversationId, id)).get();
+  const task = db.select({ id: tasks.id, status: tasks.status }).from(tasks).where(eq(tasks.conversationId, id)).get();
   if (task) {
+    // Cancel running task on Python worker
+    if (task.status === "running") {
+      try { await fetch(`http://127.0.0.1:8001/cancel/${task.id}`, { method: "POST" }); } catch { /* best effort */ }
+    }
     db.delete(agentResults).where(eq(agentResults.taskId, task.id)).run();
     db.delete(tasks).where(eq(tasks.conversationId, id)).run();
   }

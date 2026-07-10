@@ -1,0 +1,4 @@
+{"timestamp": 1783671205.5938072, "event_type": "agent_start", "task_id": "task_1783671156897", "subtask_id": "t1", "agent_name": "商业模式搜索员", "data": {}}
+{"timestamp": 1783671205.5945714, "event_type": "agent_start", "task_id": "task_1783671156897", "subtask_id": "t3", "agent_name": "竞争策略分析员", "data": {}}
+{"timestamp": 1783671216.7914984, "event_type": "tool_call", "task_id": "task_1783671156897", "subtask_id": "", "agent_name": "竞争策略分析员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783671226.21607, "event_type": "tool_call", "task_id": "task_1783671156897", "subtask_id": "", "agent_name": "商业模式搜索员", "data": {"tool": "search_engine"}}
