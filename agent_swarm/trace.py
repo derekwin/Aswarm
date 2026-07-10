@@ -42,8 +42,8 @@ class TraceCollector:
             **kwargs,
         ))
 
-    def flush(self, task_id: str):
-        """Write trace to disk and clear memory."""
+    def flush(self, task_id: str, clear: bool = True):
+        """Write trace to disk. Set clear=False to keep events in memory."""
         if not self._events:
             return
         self._ensure_dir()
@@ -51,7 +51,8 @@ class TraceCollector:
         with open(path, "w") as f:
             for e in self._events:
                 f.write(json.dumps(asdict(e), ensure_ascii=False) + "\n")
-        self._events.clear()
+        if clear:
+            self._events.clear()
 
 
 # Module-level instance (directory created lazily, no import-time side effects)

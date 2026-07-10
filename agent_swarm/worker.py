@@ -203,6 +203,7 @@ async def _do_run_task(task_id: str, query: str, lang: str):
                     "state": data["state"], "output": data.get("output", ""),
                     "error": data.get("error"), "retry_count": data.get("retry_count", 0),
                 })
+                trace.flush(task_id, clear=False)  # persist but keep buffer for other agents
             case "tool_call":
                 trace.record("tool_call", task_id, agent_name=data["agent_name"], data={"tool": data["tool"]})
                 arg_preview = json.dumps(data.get("args", {}), ensure_ascii=False)[:200]
@@ -227,7 +228,7 @@ async def _do_run_task(task_id: str, query: str, lang: str):
     except Exception as e:
         _push_event(task_id, {"type": "error", "msg": str(e), "code": _classify_error(e)})
     finally:
-        trace.flush(task_id)
+        trace.flush(task_id)  # final flush, clear buffer
         await asyncio.sleep(5)
 
     return {"task_id": task_id, "status": "completed" if "summary" in locals() else "error"}
