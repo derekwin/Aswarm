@@ -271,8 +271,14 @@ async def event_stream(task_id: str):
             data = {k: v for k, v in event.items() if k != "event_id"}
             yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
-            if event.get("type") == "done":
+            if event.get("type") == "done" or event.get("type") == "error":
                 break
+
+        # Cleanup after all clients disconnected
+        _event_queues.pop(task_id, None)
+        _cancel_flags.pop(task_id, None)
+        # Keep archive for 5 minutes for late clients
+        asyncio.get_event_loop().call_later(300, lambda: _event_archive.pop(task_id, None))
 
         _event_queues.pop(task_id, None)
         _cancel_flags.pop(task_id, None)
