@@ -1,0 +1,5 @@
+{"timestamp": 1783699990.1862423, "event_type": "agent_start", "task_id": "task_1783699911239", "subtask_id": "t1", "agent_name": "需求分析员", "data": {"role": "coder"}}
+{"timestamp": 1783700017.9776459, "event_type": "agent_start", "task_id": "task_1783699943544", "subtask_id": "t1", "agent_name": "专业概况研究员", "data": {"role": "web_searcher"}}
+{"timestamp": 1783700017.978222, "event_type": "agent_start", "task_id": "task_1783699943544", "subtask_id": "t2", "agent_name": "师资力量分析员", "data": {"role": "web_searcher"}}
+{"timestamp": 1783700017.9785852, "event_type": "agent_start", "task_id": "task_1783699943544", "subtask_id": "t4", "agent_name": "科研资源调查员", "data": {"role": "web_searcher"}}
+{"timestamp": 1783700017.9816678, "event_type": "agent_start", "task_id": "task_1783699943544", "subtask_id": "t5", "agent_name": "学生生活调研员", "data": {"role": "web_searcher"}}

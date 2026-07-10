@@ -1,0 +1,5 @@
+{"timestamp": 1783726823.810264, "event_type": "agent_start", "task_id": "task_1783726770894", "subtask_id": "t1", "agent_name": "需求分析员", "data": {"role": "coder"}}
+{"timestamp": 1783726833.9034839, "event_type": "agent_done", "task_id": "task_1783726770894", "subtask_id": "t1", "agent_name": "", "data": {"state": "completed", "retries": 0}}
+{"timestamp": 1783726833.9075985, "event_type": "agent_start", "task_id": "task_1783726770894", "subtask_id": "t2", "agent_name": "代码编写员", "data": {"role": "coder"}}
+{"timestamp": 1783726840.9799051, "event_type": "agent_done", "task_id": "task_1783726770894", "subtask_id": "t2", "agent_name": "", "data": {"state": "completed", "retries": 0}}
+{"timestamp": 1783726840.9838655, "event_type": "agent_start", "task_id": "task_1783726770894", "subtask_id": "t3", "agent_name": "代码审查员", "data": {"role": "reviewer"}}

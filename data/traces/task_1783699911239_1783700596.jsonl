@@ -1,0 +1,2 @@
+{"timestamp": 1783700596.1684291, "event_type": "tool_call", "task_id": "task_1783699911239", "subtask_id": "", "agent_name": "测试执行员", "data": {"tool": "python_executor", "args": "{'timeout': 60, 'code': 'import sys\\nsys.path.append(\\'/workspace\\')\\n# 检查文件完整性\\nwith open(\\'/worksp"}}
+{"timestamp": 1783700596.2298617, "event_type": "tool_call", "task_id": "task_1783699911239", "subtask_id": "", "agent_name": "测试执行员", "data": {"tool": "judge:doom_loop", "args": "{'message': \"Doom loop detected: 'python_executor' called 4 times in the last 4 tool calls. Try a fu"}}

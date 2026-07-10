@@ -145,21 +145,26 @@ DEFAULT_MODEL_MAP = {
 async def execute_task(query: str = Query(...), task_id: str = Query(...), lang: str = Query(default="en"), conv_id: str = Query(default="")):
     """Start task execution in background. Events streamed via /events/{task_id}."""
     _event_queues[task_id] = asyncio.Queue()
-    task = asyncio.ensure_future(_run_task(task_id, query, lang))
+    task = asyncio.ensure_future(_run_task(task_id, query, lang, conv_id))
     task.add_done_callback(lambda t: logger.error(f"Task {task_id} crashed: {t.exception()}") if t.exception() else None)
     _push_event(task_id, {"type": "exec_state", "state": "decomposing"})
     return {"task_id": task_id, "status": "started"}
 
 
-async def _run_task(task_id: str, query: str, lang: str):
+async def _run_task(task_id: str, query: str, lang: str, conv_id: str = ""):
     try:
-        await _do_run_task(task_id, query, lang)
+        await _do_run_task(task_id, query, lang, conv_id)
     except Exception as e:
         logger.exception(f"Task {task_id} failed")
         _push_event(task_id, {"type": "error", "msg": str(e), "code": "INTERNAL_ERROR"})
 
 
-async def _do_run_task(task_id: str, query: str, lang: str):
+async def _do_run_task(task_id: str, query: str, lang: str, conv_id: str = ""):
+    # Set workspace directory for this conversation
+    if conv_id:
+        ws = os.path.join(os.environ.get("AGENTSWARM_DATA_DIR", "data"), "workspaces", conv_id)
+        os.makedirs(ws, exist_ok=True)
+        os.environ["AGENTSWARM_WORKSPACE"] = ws
     settings = await _load_settings()
     tools = ToolRegistry()
     llm = LLMClient(base_url=settings["llm_base_url"], api_key=settings["llm_api_key"])

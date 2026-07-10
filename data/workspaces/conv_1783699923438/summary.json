@@ -1,0 +1,60 @@
+{
+    "Department Overview": {
+        "Established": 1985,
+        "Programs": [
+            "Undergraduate",
+            "Master's",
+            "PhD"
+        ],
+        "Focus Areas": [
+            "AI",
+            "Data Science",
+            "Cybersecurity",
+            "Software Engineering"
+        ]
+    },
+    "Historical Milestones": [
+        {
+            "Year": 1985,
+            "Event": "Establishment of School of Computer Science and Technology"
+        },
+        {
+            "Year": 2000,
+            "Event": "First national-level key lab in information security"
+        },
+        {
+            "Year": 2010,
+            "Event": "Launch of first AI major in China"
+        },
+        {
+            "Year": 2015,
+            "Event": "National Engineering Laboratory for Information Security established"
+        },
+        {
+            "Year": 2020,
+            "Event": "Ranked #1 in China for AI research (Nature Index)"
+        }
+    ],
+    "Organizational Structure": {
+        "Undergraduate Programs": [
+            "Computer Science and Technology",
+            "Software Engineering",
+            "Information Security"
+        ],
+        "Graduate Programs": [
+            "Master's in Computer Science",
+            "PhD in Computer Science"
+        ],
+        "Administrative Units": [
+            "Academic Affairs"
+        ]
+    },
+    "Faculty": {
+        "Total Researchers": "120+ full-time researchers",
+        "Note": "Some faculty listings may vary across sources"
+    },
+    "Key Laboratories": [
+        "National Engineering Laboratory for Information Security",
+        "National Key Laboratory for Information Security (2000)"
+    ]
+}
