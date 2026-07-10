@@ -52,6 +52,7 @@ export default function Home() {
   const [showFiles, setShowFiles] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const esRef = useRef<EventSource | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -179,17 +180,27 @@ export default function Home() {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar conversations={convs} activeId={activeConv} onSelect={switchConv}
-        onNew={async () => {
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+      {/* Sidebar: hidden on mobile, visible on lg+ */}
+      <div className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 fixed lg:static top-0 bottom-0 left-0 z-50 transition-transform duration-200`}>
+        <Sidebar conversations={convs} activeId={activeConv} onSelect={(id) => { switchConv(id); setSidebarOpen(false); }}
+          onNew={async () => {
           esRef.current?.close();
           if (!hasConvs) {
             try { const c = await trpcMutate("conversation.create", { title: "New Task" }); setActiveConv(c.id); refreshConvs(); } catch { /* ignore */ }
           } else { setActiveConv(null); }
           setMessages([]); setAgents({}); setExecState("idle"); setProgress(null);
         }} />
+      </div>
 
       <main className="flex-1 flex flex-col min-w-0">
         <header className="h-12 border-b border-zinc-800 flex items-center px-4 shrink-0 glass-heavy">
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden mr-2 text-zinc-400 hover:text-zinc-200 p-1">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
           <h1 className="font-semibold text-sm">AgentSwarm</h1>
           <div className="ml-auto flex items-center gap-1">
             {activeConv && Object.keys(agents).length > 0 && (
