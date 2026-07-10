@@ -182,6 +182,19 @@ export default function Home() {
     }
   }, [messages]);
 
+  // Keyboard shortcut: Ctrl+K / Cmd+K to focus input
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        const el = document.getElementById("quickInput") || document.querySelector("main input[type='text'], main textarea");
+        if (el instanceof HTMLElement) el.focus();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   // ── Actions ──
 
   const handleSubmit = async (query: string) => {
@@ -237,6 +250,7 @@ export default function Home() {
 
     try {
       const conv = await get(`/api/conversations/${id}`);
+      document.title = (conv.title || "AgentSwarm") + " — AgentSwarm";
       setMessages((conv.messages || []).map((m: { role: string; content: string; id?: number }) => ({
         role: m.role, content: m.content, id: m.id ?? Date.now(),
       })));
@@ -247,6 +261,11 @@ export default function Home() {
       }
     } catch { /* ignore */ }
     setLoading(false);
+    // Focus input after switching
+    setTimeout(() => {
+      const el = document.querySelector("main input[type='text'], main textarea") as HTMLElement | null;
+      el?.focus();
+    }, 100);
   };
 
   const handleEdit = (text: string) => {
@@ -298,6 +317,7 @@ export default function Home() {
               try { const c = await post("/api/conversations", { title: "New Task" }); setActiveConv(c.id); refreshConvs(); } catch { /* ignore */ }
             } else {
               setActiveConv(null);
+              document.title = "AgentSwarm";
             }
             setMessages([]); setAgents({}); setExecState("idle"); setProgress(null);
           }}
