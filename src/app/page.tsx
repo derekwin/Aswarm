@@ -11,22 +11,19 @@ import { InputBar } from "@/components/InputBar";
 import { Sidebar } from "@/components/Sidebar";
 import { useT } from "@/hooks/useT";
 
+async function get(path: string) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function post(path: string, body?: unknown) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
 type Agent = { name: string; role: string; state: string; subtaskId: string; output?: string; error?: string };
 type Msg = { role: string; content: string; id: number; typing?: boolean };
-
-async function q(path: string, input: Record<string, unknown>) {
-  const r = await fetch(`/api/trpc/${path}?batch=1&input=${encodeURIComponent(JSON.stringify(input))}`);
-  if (!r.ok) throw new Error(await r.text());
-  return (await r.json())[0].result.data.json;
-}
-async function m(path: string, input: Record<string, unknown>) {
-  const r = await fetch(`/api/trpc/${path}`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ json: input }),
-  });
-  if (!r.ok) throw new Error(await r.text());
-  return (await r.json()).result.data.json;
-}
 
 export default function Home() {
   const t = useT();
@@ -47,7 +44,7 @@ export default function Home() {
   const rt = useRef<ReturnType<typeof setTimeout>>(undefined);
   const ef = useRef(es); useEffect(() => { ef.current = es; }, [es]);
 
-  const rc = useCallback(async () => { try { setConvs(await q("conversation.list", {})); } catch { /* */ } }, []);
+  const rc = useCallback(async () => { try { setConvs(await get("/api/conversations")); } catch { /* */ } }, []);
   useEffect(() => { rc(); }, [rc]);
 
   const st = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
@@ -62,7 +59,7 @@ export default function Home() {
 
   const cs = useCallback((id: string) => {
     er.current?.close(); clearTimeout(rt.current);
-    const e = new EventSource(`/api/task/${id}/stream`); er.current = e;
+    const e = new EventSource(`/api/tasks/${id}/stream`); er.current = e;
     e.onmessage = (ev) => {
       try {
         const d = JSON.parse(ev.data);
@@ -83,25 +80,28 @@ export default function Home() {
 
   const hs = async (query: string) => {
     let cid = ac;
-    if (!cid) { try { const c = await m("conversation.create",{title:query.slice(0,40)}); cid=c.id; setAc(cid); rc(); } catch(e) { console.error("create conv failed:",e); return; } }
+    if (!cid) { try { const c = await post("/api/conversations", { title: query.slice(0, 40) }); cid = c.id; setAc(cid); rc(); } catch { return; } }
     if (!cid) return;
     setMsgs(p=>[...p,{role:"user",content:query,id:Date.now()}]);
     setMsgs(p=>[...p,{role:"assistant",content:t("decomposing"),typing:true,id:Date.now()+1}]);
     setEs("connecting"); setAgs({}); setProg(null); setDet(null);
-    try { const r = await m("task.submit",{query,convId:cid,lang:localStorage.getItem("lang")||"en"}); setTid(r.taskId); cs(r.taskId); }
-    catch(e) { console.error("task submit failed:",e); setMsgs(p=>{const a=[...p];a[a.length-1]={...a[a.length-1],content:`${t("connectionLost")}: ${e}`,typing:false};return a;}); setEs("failed"); }
+    try {
+      const r = await post("/api/tasks", { query, convId: cid, lang: localStorage.getItem("lang") || "en" });
+      setTid(r.taskId); cs(r.taskId);
+    } catch {
+      setMsgs(p=>{const a=[...p];a[a.length-1]={...a[a.length-1],content:t("connectionLost"),typing:false};return a;}); setEs("failed");
+    }
   };
 
-  const hp = () => { er.current?.close(); setEs("cancelled"); if(tid) m("task.cancel",{taskId:tid}).catch(()=>{}); };
+  const hp = () => { er.current?.close(); setEs("cancelled"); if(tid) post(`/api/tasks/${tid}/cancel`).catch(()=>{}); };
 
   const sw = async (id: string) => {
     er.current?.close(); clearTimeout(rt.current); setAc(id); setLd(true);
     setMsgs([]); setAgs({}); setEs("idle"); setProg(null); setDet(null);
     try {
-      const c = await q("conversation.get",{id});
+      const c = await get(`/api/conversations/${id}`);
       setMsgs((c.messages||[]).map((m:{role:string;content:string;id?:number})=>({role:m.role,content:m.content,id:m.id??Date.now()})));
-      const tk = await q("task.get",{convId:id});
-      if(tk?.status==="running"){setTid(tk.id);setEs("streaming");cs(tk.id);}
+      if(c.task?.status==="running"){setTid(c.task.id);setEs("streaming");cs(c.task.id);}
     } catch { /* */ }
     setLd(false);
   };
@@ -116,7 +116,7 @@ export default function Home() {
       {so&&<div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={()=>setSo(false)}/>}
       <div className={`${so?"translate-x-0":"-translate-x-full"} lg:translate-x-0 fixed lg:static top-0 bottom-0 left-0 z-50 transition-transform duration-200`}>
         <Sidebar conversations={convs} activeId={ac} onSelect={(id)=>{sw(id);setSo(false)}}
-          onNew={async()=>{er.current?.close();if(!hc){try{const c=await m("conversation.create",{title:"New Task"});setAc(c.id);rc();}catch{/* */}}else setAc(null);setMsgs([]);setAgs({});setEs("idle");setProg(null)}}/>
+          onNew={async()=>{er.current?.close();if(!hc){try{const c=await post("/api/conversations",{title:"New Task"});setAc(c.id);rc();}catch{/* */}}else setAc(null);setMsgs([]);setAgs({});setEs("idle");setProg(null)}}/>
       </div>
       <main className="flex-1 flex flex-col min-w-0">
         <header className="h-12 border-b border-zinc-800 flex items-center px-4 shrink-0 glass-heavy">

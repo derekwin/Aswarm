@@ -9,20 +9,13 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.101.2",
-    "@trpc/client": "^11.18.0",
-    "@trpc/next": "^11.18.0",
-    "@trpc/react-query": "^11.18.0",
-    "@trpc/server": "^11.18.0",
     "better-sqlite3": "^12.11.1",
     "drizzle-orm": "^0.45.2",
     "next": "16.2.10",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1",
-    "superjson": "^2.2.6",
-    "zod": "^4.4.3"
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
