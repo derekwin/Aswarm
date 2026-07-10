@@ -4,9 +4,9 @@ import { useState } from "react";
 
 type Conv = { id: string; title: string; createdAt: string };
 
-export function Sidebar({ conversations, activeId, onSelect, onNew, loading }: {
+export function Sidebar({ conversations, activeId, onSelect, onNew, onDelete, loading }: {
   conversations: Conv[]; activeId: string | null; onSelect: (id: string) => void; onNew: () => void;
-  loading?: boolean;
+  onDelete?: (id: string) => void; loading?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const filtered = search ? conversations.filter(c => c.title.toLowerCase().includes(search.toLowerCase())) : conversations;
@@ -20,19 +20,19 @@ export function Sidebar({ conversations, activeId, onSelect, onNew, loading }: {
       </div>
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {loading ? (
-          <>
-            {[1,2,3,4,5].map(i => (
-              <div key={i} className="animate-shimmer px-3 py-2 rounded-lg">
-                <div className="h-3.5 rounded bg-zinc-700 w-4/5" />
-              </div>
-            ))}
-          </>
+          [1,2,3,4,5].map(i => (
+            <div key={i} className="animate-shimmer px-3 py-2 rounded-lg"><div className="h-3.5 rounded bg-zinc-700 w-4/5" /></div>
+          ))
         ) : filtered.length === 0 ? (
           <p className="text-center py-8 text-zinc-500 text-sm">No conversations</p>
         ) : (
           filtered.map(c => (
             <div key={c.id} className="group relative">
               <button onClick={() => onSelect(c.id)} className={`w-full text-left px-3 py-2 rounded-lg text-sm truncate transition-colors ${c.id === activeId ? "bg-zinc-800 text-zinc-200" : "text-zinc-400 hover:bg-zinc-800/50"}`}>{c.title || "New Task"}</button>
+              {onDelete && (
+                <button onClick={(e) => { e.stopPropagation(); onDelete(c.id); }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 text-xs transition-all">✕</button>
+              )}
             </div>
           ))
         )}

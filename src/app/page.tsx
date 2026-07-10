@@ -70,6 +70,7 @@ export default function Home() {
   // Refs
   const eventSource = useRef<EventSource | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const execStateRef = useRef(execState);
   useEffect(() => { execStateRef.current = execState; }, [execState]);
 
@@ -173,6 +174,14 @@ export default function Home() {
     return () => { eventSource.current?.close(); clearTimeout(reconnectTimer.current); };
   }, []);
 
+  // Auto-scroll on new messages (only if near bottom)
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 100) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
+  }, [messages]);
+
   // ── Actions ──
 
   const handleSubmit = async (query: string) => {
@@ -244,6 +253,15 @@ export default function Home() {
     if (text) handleSubmit(text);
   };
 
+  const handleDeleteConv = async (id: string) => {
+    if (!confirm("Delete this conversation?")) return;
+    try {
+      await fetch(`/api/conversations/${id}`, { method: "DELETE" });
+      if (id === activeConv) { setActiveConv(null); setMessages([]); setAgents({}); setExecState("idle"); }
+      refreshConvs();
+    } catch { /* ignore */ }
+  };
+
   // ── Derived values ──
 
   const hasConversations = convs.length > 0;
@@ -273,6 +291,7 @@ export default function Home() {
           activeId={activeConv}
           loading={convs.length === 0 && !activeConv}
           onSelect={(id) => { switchConversation(id); setSidebarOpen(false); }}
+          onDelete={handleDeleteConv}
           onNew={async () => {
             eventSource.current?.close();
             if (!hasConversations) {
@@ -332,7 +351,7 @@ export default function Home() {
               <span className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
             </div>
           ) : (
-            <div className="max-w-3xl mx-auto p-4 space-y-4">
+            <div className="max-w-3xl mx-auto p-4 space-y-4" ref={scrollRef}>
               {messages.map((m, i) => <ChatMessage key={m.id || i} {...m} onEdit={handleEdit} />)}
               {progress && totalAgents > 0 && <ProgressBar completed={completedAgents} total={totalAgents} />}
               {execState !== "idle" && <AgentTracker agents={agents} execState={execState} onAgentClick={setDetailAgent} />}
