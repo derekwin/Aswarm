@@ -1,0 +1,5 @@
+{"timestamp": 1783672640.038021, "event_type": "agent_start", "task_id": "task_1783672580307", "subtask_id": "t1", "agent_name": "商业模式调研员", "data": {"role": "web_searcher"}}
+{"timestamp": 1783672645.3683245, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783672656.797152, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "webfetch"}}
+{"timestamp": 1783672665.336316, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783672676.514589, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "search_engine"}}

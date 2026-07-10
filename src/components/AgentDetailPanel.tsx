@@ -59,7 +59,7 @@ export function AgentDetailPanel({ agent, taskId, onClose }: {
                   const d = evt.data;
                   let info = "";
                   if (evt.event_type === "agent_start") {
-                    info = evt.agent_name ? `${evt.agent_name} · ${d.role as string || ""}` : (d.role as string) || "";
+                    info = (d.role as string) || "started";
                   } else if (evt.event_type === "agent_done") {
                     const retries = d.retries as number | undefined;
                     info = `${(d.state as string) || ""}${retries ? ` · retry #${retries}` : ""}`;

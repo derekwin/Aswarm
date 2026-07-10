@@ -1,0 +1,23 @@
+{"timestamp": 1783672640.038021, "event_type": "agent_start", "task_id": "task_1783672580307", "subtask_id": "t1", "agent_name": "商业模式调研员", "data": {"role": "web_searcher"}}
+{"timestamp": 1783672645.3683245, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783672656.797152, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "webfetch"}}
+{"timestamp": 1783672665.336316, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783672676.514589, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783672685.4680085, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783672685.6785579, "event_type": "agent_done", "task_id": "task_1783672580307", "subtask_id": "t1", "agent_name": "", "data": {"state": "failed", "retries": 0}}
+{"timestamp": 1783672685.6827047, "event_type": "agent_start", "task_id": "task_1783672580307", "subtask_id": "t1", "agent_name": "商业模式调研员", "data": {"role": "web_searcher"}}
+{"timestamp": 1783672692.8759108, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783672699.9926848, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "webfetch"}}
+{"timestamp": 1783672706.378251, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783672716.495776, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783672724.8062978, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783672725.1679778, "event_type": "agent_done", "task_id": "task_1783672580307", "subtask_id": "t1", "agent_name": "", "data": {"state": "failed", "retries": 0}}
+{"timestamp": 1783672725.171914, "event_type": "agent_start", "task_id": "task_1783672580307", "subtask_id": "t1", "agent_name": "商业模式调研员", "data": {"role": "web_searcher"}}
+{"timestamp": 1783672731.2400427, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783672739.546214, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783672750.1385283, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783672759.614165, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783672759.8280294, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "judge:doom_loop"}}
+{"timestamp": 1783672830.100315, "event_type": "tool_call", "task_id": "task_1783672580307", "subtask_id": "", "agent_name": "商业模式调研员", "data": {"tool": "judge:retry"}}
+{"timestamp": 1783672830.1011472, "event_type": "agent_done", "task_id": "task_1783672580307", "subtask_id": "t1", "agent_name": "", "data": {"state": "completed", "retries": 0}}
+{"timestamp": 1783672830.105971, "event_type": "agent_start", "task_id": "task_1783672580307", "subtask_id": "t2", "agent_name": "数据分析师", "data": {"role": "data_analyst"}}
