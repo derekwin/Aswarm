@@ -81,15 +81,15 @@ export default function Home() {
   }, [t]);
   useEffect(() => { return () => { er.current?.close(); clearTimeout(rt.current); }; }, []);
 
-  const hs = async (q: string) => {
+  const hs = async (query: string) => {
     let cid = ac;
-    if (!cid) { try { const c = await m("conversation.create",{title:q.slice(0,40)}); cid=c.id; setAc(cid); rc(); } catch { return; } }
+    if (!cid) { try { const c = await m("conversation.create",{title:query.slice(0,40)}); cid=c.id; setAc(cid); rc(); } catch(e) { console.error("create conv failed:",e); return; } }
     if (!cid) return;
-    setMsgs(p=>[...p,{role:"user",content:q,id:Date.now()}]);
+    setMsgs(p=>[...p,{role:"user",content:query,id:Date.now()}]);
     setMsgs(p=>[...p,{role:"assistant",content:t("decomposing"),typing:true,id:Date.now()+1}]);
     setEs("connecting"); setAgs({}); setProg(null); setDet(null);
-    try { const r = await m("task.submit",{query:q,convId:cid,lang:localStorage.getIteapi("lang")||"en"}); setTid(r.taskId); cs(r.taskId); }
-    catch { setMsgs(p=>{const a=[...p];a[a.length-1]={...a[a.length-1],content:t("connectionLost"),typing:false};return a;}); setEs("failed"); }
+    try { const r = await m("task.submit",{query,convId:cid,lang:localStorage.getItem("lang")||"en"}); setTid(r.taskId); cs(r.taskId); }
+    catch(e) { console.error("task submit failed:",e); setMsgs(p=>{const a=[...p];a[a.length-1]={...a[a.length-1],content:`${t("connectionLost")}: ${e}`,typing:false};return a;}); setEs("failed"); }
   };
 
   const hp = () => { er.current?.close(); setEs("cancelled"); if(tid) m("task.cancel",{taskId:tid}).catch(()=>{}); };
