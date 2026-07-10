@@ -296,7 +296,6 @@ export default function Home() {
   };
 
   const handleDeleteConv = async (id: string) => {
-    if (!confirm("Delete this conversation?")) return;
     try {
       await fetch(`/api/conversations/${id}`, { method: "DELETE" });
       if (id === activeConv) { setActiveConv(null); setMessages([]); setAgents({}); setExecState("idle"); }

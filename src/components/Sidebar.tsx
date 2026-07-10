@@ -28,7 +28,6 @@ export function Sidebar({ conversations, activeId, onSelect, onNew, onDelete, lo
       if (id === activeId && onDelete) onDelete(id);
     }
     setSelected(new Set()); setSelectMode(false);
-    window.location.reload();
   };
 
   return (
@@ -62,7 +61,7 @@ export function Sidebar({ conversations, activeId, onSelect, onNew, onDelete, lo
               )}
               <button onClick={() => selectMode ? toggleSelect(c.id) : onSelect(c.id)} className={`flex-1 text-left px-3 py-2 text-sm truncate ${c.id === activeId && !selectMode ? "text-zinc-200" : "text-zinc-400"}`}>{c.title || "New Task"}</button>
               {!selectMode && onDelete && (
-                <button onClick={(e) => { e.stopPropagation(); onDelete(c.id); }} className="shrink-0 text-zinc-500 hover:text-red-400 text-xs px-2 py-1">✕</button>
+                <button onClick={(e) => { e.stopPropagation(); if (confirm("Delete this conversation?")) onDelete(c.id); }} className="shrink-0 text-zinc-500 hover:text-red-400 text-xs px-2 py-1">✕</button>
               )}
             </div>
           ))
