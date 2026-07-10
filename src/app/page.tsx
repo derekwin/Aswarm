@@ -233,7 +233,7 @@ export default function Home() {
   const handleSubmit = async (query: string) => {
     // Show messages immediately — API calls happen in background
     setMessages(prev => [...prev, { role: "user", content: query, id: Date.now() }]);
-    setMessages(prev => [...prev, { role: "assistant", content: t("decomposing"), typing: true, id: Date.now() + 1 }]);
+    setMessages(prev => [...prev, { role: "assistant", content: "", typing: false, id: Date.now() + 1 }]);
     setActiveTrackerIdx(messages.length + 1);
     setExecState("connecting");
     setAgents({}); setProgress(null); setDetailAgent(null);
