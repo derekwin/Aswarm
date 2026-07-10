@@ -258,6 +258,60 @@ async def health():
     return {"status": "ok"}
 
 
+# ── Trace ──
+
+@app.get("/trace/{task_id}/{subtask_id}")
+async def get_trace(task_id: str, subtask_id: str):
+    """Return execution trace events for a specific agent."""
+    import glob as _glob
+    trace_dir = os.path.join(os.environ.get("AGENTSWARM_DATA_DIR", "data"), "traces")
+    events = []
+    if os.path.isdir(trace_dir):
+        for f in sorted(_glob.glob(os.path.join(trace_dir, f"{task_id}*.jsonl"))):
+            for line in open(f):
+                try:
+                    evt = json.loads(line)
+                    if evt.get("subtask_id") == subtask_id:
+                        events.append(evt)
+                except json.JSONDecodeError:
+                    pass
+    return {"trace_events": events}
+
+
+# ── Workspace ──
+
+@app.get("/workspace/{conv_id}")
+async def list_workspace(conv_id: str):
+    """List files in the workspace directory for a conversation."""
+    ws = os.path.join(os.environ.get("AGENTSWARM_DATA_DIR", "data"), "workspaces", conv_id)
+    if not os.path.isdir(ws):
+        return {"files": [], "path": ws}
+    files = []
+    for root, dirs, filenames in os.walk(ws):
+        rel = os.path.relpath(root, ws)
+        if rel == ".": rel = ""
+        for d in dirs:
+            files.append({"name": d, "path": os.path.join(rel, d) if rel else d, "type": "dir", "size": 0})
+        for f in filenames:
+            fp = os.path.join(root, f)
+            files.append({"name": f, "path": os.path.join(rel, f) if rel else f, "type": "file", "size": os.path.getsize(fp)})
+    files.sort(key=lambda x: (x["type"] != "dir", x["name"]))
+    return {"files": files, "path": str(ws)}
+
+
+@app.get("/workspace/{conv_id}/file")
+async def read_file(conv_id: str, path: str = ""):
+    """Read a file from the workspace."""
+    fp = os.path.join(os.environ.get("AGENTSWARM_DATA_DIR", "data"), "workspaces", conv_id, path)
+    if not os.path.isfile(fp):
+        raise HTTPException(404, "File not found")
+    try:
+        content = open(fp, encoding="utf-8", errors="replace").read()
+        return {"path": path, "content": content[:100000], "size": os.path.getsize(fp)}
+    except Exception:
+        return {"path": path, "content": "[Binary file]", "size": os.path.getsize(fp), "binary": True}
+
+
 if __name__ == "__main__":
     import uvicorn
     host = os.environ.get("AGENTSWARM_WORKER_HOST", "0.0.0.0")

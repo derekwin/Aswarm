@@ -9,12 +9,12 @@ export function FilesPanel({ convId, onClose }: { convId: string; onClose: () =>
   const [preview, setPreview] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`/api/workspace/${convId}`).then(r => r.json())
+    fetch(`http://${window.location.hostname}:8001/workspace/${convId}`).then(r => r.json())
       .then(d => { if (d.files) setFiles(d.files); }).catch(() => {});
   }, [convId]);
 
   const viewFile = async (path: string) => {
-    const res = await fetch(`/api/workspace/${convId}/file?path=${encodeURIComponent(path)}`);
+    const res = await fetch(`http://${window.location.hostname}:8001/workspace/${convId}/file?path=${encodeURIComponent(path)}`);
     const d = await res.json();
     setPreview(d.content || "[binary]");
   };

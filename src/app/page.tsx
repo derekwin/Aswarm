@@ -271,6 +271,7 @@ export default function Home() {
         <Sidebar
           conversations={convs}
           activeId={activeConv}
+          loading={convs.length === 0 && !activeConv}
           onSelect={(id) => { switchConversation(id); setSidebarOpen(false); }}
           onNew={async () => {
             eventSource.current?.close();

@@ -12,7 +12,7 @@ export function AgentDetailPanel({ agent, taskId, onClose }: { agent: Agent; tas
 
   useEffect(() => {
     if (!taskId || !agent.subtaskId) return;
-    fetch(`/api/trace/${taskId}/${agent.subtaskId}`)
+    fetch(`http://${window.location.hostname}:8001/trace/${taskId}/${agent.subtaskId}`)
       .then(r => r.json()).then(d => { if (d.trace_events) setTrace(d.trace_events); }).catch(() => {}).finally(() => setLoading(false));
   }, [taskId, agent.subtaskId]);
 
