@@ -394,6 +394,13 @@ class SwarmOrchestrator:
                 })
                 judge_feedback = ""  # only apply once per retry
 
+            # ── Proactive context compression ──
+            total_chars = sum(len(str(m.get("content", ""))) for m in messages)
+            if total_chars > 50_000 and len(messages) > 8:
+                compressed = await self._compress_context(messages)
+                logger.info(f"  [{agent.name}] Proactive compression: {len(messages)} → {len(compressed)} msgs ({total_chars} chars)")
+                messages = compressed
+
             try:
                 msg = await self._call_llm(
                     model=agent.model,
