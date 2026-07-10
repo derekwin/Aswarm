@@ -47,8 +47,8 @@ class SwarmOrchestrator:
     MAX_SEARCH_ROUNDS = 4
     AGENT_TIMEOUT = 300       # max seconds per agent execution
     LLM_CALL_TIMEOUT = 120    # max seconds per LLM call
-    ENABLE_LLM_JUDGE = True       # set False to use heuristic-only judge
-    JUDGE_MODEL = "qwen3:4b"      # small model for quality evaluation
+    ENABLE_LLM_JUDGE = False     # set True for LLM judge; heuristic is fast and good enough
+    JUDGE_MODEL = "qwen3:8b"     # only used if ENABLE_LLM_JUDGE=True
     MAX_QUALITY_RETRIES = 2       # retries triggered by Judge within a single run
 
     def __init__(
