@@ -79,19 +79,19 @@ export default function Home() {
   // ── Data fetching ──
 
   const refreshConvs = useCallback(async () => {
-    try {
-      const data = await get("/api/conversations");
-      setConvs(data);
-      // Auto-restore last active conversation
-      if (data.length > 0 && !activeConv) {
-        const lastId = localStorage.getItem("lastConvId");
-        if (lastId && data.find((c: { id: string }) => c.id === lastId)) {
-          switchConversation(lastId);
-        }
-      }
-    } catch (e) { console.error("Failed to load conversations:", e); }
+    try { setConvs(await get("/api/conversations")); } catch (e) { console.error("Failed to load conversations:", e); }
   }, []);
   useEffect(() => { refreshConvs(); }, [refreshConvs]);
+
+  // Auto-restore last active conversation after conversations load
+  useEffect(() => {
+    if (convs.length > 0 && !activeConv) {
+      const lastId = localStorage.getItem("lastConvId");
+      if (lastId && convs.find(c => c.id === lastId)) {
+        switchConversation(lastId);
+      }
+    }
+  }, [convs, activeConv]);
 
   // Health check: ping Python worker every 30s
   useEffect(() => {
