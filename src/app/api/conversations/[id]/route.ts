@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { conversations, messages, tasks } from "@/db/schema";
+import { conversations, messages, tasks, agentResults } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -14,6 +14,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const task = db.select({ id: tasks.id }).from(tasks).where(eq(tasks.conversationId, id)).get();
+  if (task) {
+    db.delete(agentResults).where(eq(agentResults.taskId, task.id)).run();
+    db.delete(tasks).where(eq(tasks.conversationId, id)).run();
+  }
+  db.delete(messages).where(eq(messages.conversationId, id)).run();
   db.delete(conversations).where(eq(conversations.id, id)).run();
   return NextResponse.json({ ok: true });
 }
