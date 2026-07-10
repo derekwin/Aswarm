@@ -20,6 +20,24 @@ async function api(path: string, opts?: RequestInit) {
   return res.json();
 }
 
+async function trpcQuery(path: string, input: Record<string, unknown>) {
+  const res = await fetch(`/api/trpc/${path}?input=${encodeURIComponent(JSON.stringify(input))}`);
+  if (!res.ok) throw new Error(await res.text());
+  const d = await res.json();
+  return d.result.data.json;
+}
+
+async function trpcMutate(path: string, input: Record<string, unknown>) {
+  const res = await fetch(`/api/trpc/${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ json: input }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const d = await res.json();
+  return d.result.data.json;
+}
+
 export default function Home() {
   const t = useT();
   const [activeConv, setActiveConv] = useState<string | null>(null);
@@ -41,9 +59,8 @@ export default function Home() {
   useEffect(() => { execRef.current = execState; }, [execState]);
 
   // Fetch conversations
-  const refreshConvs = useCallback(() => {
-    fetch("/api/trpc/conversation.list?input=%7B%7D").then(r => r.json())
-      .then(d => { if (d?.result?.data?.json) setConvs(d.result.data.json); }).catch(() => {});
+  const refreshConvs = useCallback(async () => {
+    try { setConvs(await trpcQuery("conversation.list", {})); } catch { /* ignore */ }
   }, []);
   useEffect(() => { refreshConvs(); }, [refreshConvs]);
 
@@ -115,10 +132,10 @@ export default function Home() {
   const handleSubmit = async (query: string) => {
     let convId = activeConv;
     if (!convId) {
-      const data = JSON.stringify({ title: query.slice(0, 40) });
-      const res = await fetch(`/api/trpc/conversation.create?input=${encodeURIComponent(data)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: data });
-      const d = await res.json();
-      if (d?.result?.data?.json) { convId = d.result.data.json.id; setActiveConv(convId); refreshConvs(); }
+      try {
+        const c = await trpcMutate("conversation.create", { title: query.slice(0, 40) });
+        convId = c.id; setActiveConv(convId); refreshConvs();
+      } catch { return; }
     }
     if (!convId) return;
 
@@ -127,31 +144,30 @@ export default function Home() {
     setExecState("connecting"); setAgents({}); setProgress(null); setDetailAgent(null);
 
     try {
-      const data = JSON.stringify({ query, convId, lang: localStorage.getItem("lang") || "en" });
-      const res = await fetch(`/api/trpc/task.submit?input=${encodeURIComponent(data)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: data });
-      const d = await res.json();
-      if (d?.result?.data?.json) { setCurrentTaskId(d.result.data.json.taskId); connectSSE(d.result.data.json.taskId); }
+      const r = await trpcMutate("task.submit", { query, convId, lang: localStorage.getItem("lang") || "en" });
+      setCurrentTaskId(r.taskId);
+      connectSSE(r.taskId);
     } catch {
       setMessages(prev => { const msgs = [...prev]; msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], content: t("connectionLost"), typing: false }; return msgs; });
       setExecState("failed");
     }
   };
 
-  const handleStop = () => { esRef.current?.close(); setExecState("cancelled"); };
+  const handleStop = () => {
+    esRef.current?.close();
+    setExecState("cancelled");
+    if (currentTaskId) trpcMutate("task.cancel", { taskId: currentTaskId }).catch(() => {});
+  };
 
   const switchConv = async (convId: string) => {
     esRef.current?.close(); clearTimeout(reconnectTimer.current);
     setActiveConv(convId); setLoading(true);
     setMessages([]); setAgents({}); setExecState("idle"); setProgress(null); setDetailAgent(null);
     try {
-      const res = await fetch(`/api/trpc/conversation.get?input=${encodeURIComponent(JSON.stringify({ id: convId }))}`);
-      const d = await res.json();
-      if (d?.result?.data?.json) {
-        setMessages((d.result.data.json.messages || []).map((m: { role: string; content: string; id?: number }) => ({ role: m.role, content: m.content, id: m.id ?? Date.now() })));
-        const tr = await fetch(`/api/trpc/task.get?input=${encodeURIComponent(JSON.stringify({ convId }))}`);
-        const td = await tr.json();
-        if (td?.result?.data?.json?.status === "running") { setCurrentTaskId(td.result.data.json.id); setExecState("streaming"); connectSSE(td.result.data.json.id); }
-      }
+      const c = await trpcQuery("conversation.get", { id: convId });
+      setMessages((c.messages || []).map((m: { role: string; content: string; id?: number }) => ({ role: m.role, content: m.content, id: m.id ?? Date.now() })));
+      const t = await trpcQuery("task.get", { convId });
+      if (t?.status === "running") { setCurrentTaskId(t.id); setExecState("streaming"); connectSSE(t.id); }
     } catch { /* ignore */ }
     setLoading(false);
   };
@@ -167,10 +183,7 @@ export default function Home() {
         onNew={async () => {
           esRef.current?.close();
           if (!hasConvs) {
-            const data = JSON.stringify({ title: "New Task" });
-            const res = await fetch(`/api/trpc/conversation.create?input=${encodeURIComponent(data)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: data });
-            const d = await res.json();
-            if (d?.result?.data?.json) { setActiveConv(d.result.data.json.id); refreshConvs(); }
+            try { const c = await trpcMutate("conversation.create", { title: "New Task" }); setActiveConv(c.id); refreshConvs(); } catch { /* ignore */ }
           } else { setActiveConv(null); }
           setMessages([]); setAgents({}); setExecState("idle"); setProgress(null);
         }} />

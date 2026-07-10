@@ -14,7 +14,12 @@ export function Sidebar({ conversations, activeId, onSelect, onNew }: {
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (!confirm("Delete this conversation?")) return;
-    await fetch(`/api/trpc/conversation.delete?input=${encodeURIComponent(JSON.stringify({ id }))}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    try {
+      await fetch(`/api/trpc/conversation.delete`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ json: { id } }),
+      });
+    } catch { /* ignore */ }
     if (id === activeId) onNew();
   };
 
