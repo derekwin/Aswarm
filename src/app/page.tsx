@@ -108,7 +108,8 @@ export default function Home() {
     eventSource.current?.close();
     clearTimeout(reconnectTimer.current);
 
-    const es = new EventSource(`/api/tasks/${id}/stream`);
+    const workerUrl = `http://${window.location.hostname}:8001/events/${id}`;
+    const es = new EventSource(workerUrl);
     eventSource.current = es;
 
     es.onmessage = (ev) => {

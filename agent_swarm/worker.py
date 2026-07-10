@@ -14,6 +14,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 from agent_swarm import (
     AgentFactory,
@@ -36,6 +37,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 app = FastAPI(title="AgentSwarm Worker", lifespan=lifespan, docs_url=None)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # ── State ──
 
