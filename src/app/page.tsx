@@ -339,12 +339,7 @@ export default function Home() {
           onDelete={handleDeleteConv}
           onNew={async () => {
             eventSource.current?.close();
-            if (!hasConversations) {
-              try { const c = await post("/api/conversations", { title: "New Task" }); setActiveConv(c.id); refreshConvs(); } catch { /* ignore */ }
-            } else {
-              setActiveConv(null);
-              document.title = "AgentSwarm";
-            }
+            try { const c = await post("/api/conversations", { title: "New Task" }); setActiveConv(c.id); refreshConvs(); } catch { /* ignore */ }
             setMessages([]); setAgents({}); setExecState("idle"); setProgress(null); setActiveTrackerIdx(-1);
           }}
         />
