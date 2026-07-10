@@ -76,7 +76,7 @@ export default function Home() {
   // ── Data fetching ──
 
   const refreshConvs = useCallback(async () => {
-    try { setConvs(await get("/api/conversations")); } catch { /* ignore */ }
+    try { setConvs(await get("/api/conversations")); } catch (e) { console.error("Failed to load conversations:", e); }
   }, []);
   useEffect(() => { refreshConvs(); }, [refreshConvs]);
 
@@ -182,7 +182,7 @@ export default function Home() {
         convId = conv.id;
         setActiveConv(convId);
         refreshConvs();
-      } catch { return; }
+      } catch (e) { console.error("Failed to create conversation:", e); return; }
     }
     if (!convId) return;
 
@@ -197,7 +197,8 @@ export default function Home() {
       const result = await post("/api/tasks", { query, convId, lang: localStorage.getItem("lang") || "en" });
       setTaskId(result.taskId);
       connectSSE(result.taskId);
-    } catch {
+    } catch (e) {
+      console.error("Failed to start task:", e);
       setMessages(prev => {
         const msgs = [...prev];
         msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], content: t("connectionLost"), typing: false };
