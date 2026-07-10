@@ -55,15 +55,24 @@ export function AgentDetailPanel({ agent, taskId, onClose }: {
               <div className="animate-shimmer h-4 rounded bg-zinc-800 w-3/4" />
             ) : trace.length > 0 ? (
               <div className="space-y-1">
-                {trace.map((evt, i) => (
-                  <div key={i} className="p-2 bg-zinc-800 rounded text-xs">
-                    <span className="text-accent font-mono">{evt.event_type}</span>
-                    {evt.agent_name && <span className="text-zinc-300 ml-1">({evt.agent_name})</span>}
-                    {Object.keys(evt.data).length > 0 && (
-                      <span className="text-zinc-500 ml-2">{JSON.stringify(evt.data).slice(0, 80)}</span>
-                    )}
-                  </div>
-                ))}
+                {trace.map((evt, i) => {
+                  const d = evt.data;
+                  let info = "";
+                  if (evt.event_type === "agent_start") {
+                    info = evt.agent_name ? `${evt.agent_name} · ${d.role as string || ""}` : (d.role as string) || "";
+                  } else if (evt.event_type === "agent_done") {
+                    const retries = d.retries as number | undefined;
+                    info = `${(d.state as string) || ""}${retries ? ` · retry #${retries}` : ""}`;
+                  } else if (evt.event_type === "tool_call") {
+                    info = `🔧 ${(d.tool as string) || ""}`;
+                  }
+                  return (
+                    <div key={i} className="p-1.5 rounded text-xs flex items-start gap-2">
+                      <span className={`shrink-0 w-1.5 h-1.5 rounded-full mt-1 ${evt.event_type === "agent_start" ? "bg-accent" : evt.event_type === "agent_done" ? ((d.state as string) === "failed" ? "bg-red-400" : "bg-green-400") : "bg-zinc-500"}`} />
+                      <span className="text-zinc-300">{info || evt.event_type}</span>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <p className="text-xs text-zinc-500 italic">No trace data</p>
