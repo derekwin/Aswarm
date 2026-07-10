@@ -13,6 +13,7 @@ export async function POST(req: Request) {
 
   db.insert(tasks).values({ id: taskId, conversationId: convId, query, status: "running", createdAt: now }).run();
   db.insert(msgTable).values({ conversationId: convId, role: "user", content: query, createdAt: now }).run();
+  db.insert(msgTable).values({ conversationId: convId, role: "assistant", content: "Analyzing task...", createdAt: now }).run();
   db.update(conversations).set({ title: query.slice(0, 40) }).where(eq(conversations.id, convId)).run();
 
   // Fire-and-forget

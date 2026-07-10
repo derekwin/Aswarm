@@ -165,7 +165,11 @@ export default function Home() {
             setProgress({ completed: d.completed, total: d.total });
             break;
           case "done":
-            if (d.summary) setMessages(prev => [...prev, { role: "assistant", content: d.summary, id: Date.now() }]);
+            if (d.summary) {
+              setMessages(prev => [...prev, { role: "assistant", content: d.summary, id: Date.now() }]);
+              // Persist to DB so it survives refresh
+              if (activeConv) post("/api/messages", { conversationId: activeConv, role: "assistant", content: d.summary }).catch(() => {});
+            }
             setExecState("completed");
             es.close();
             showToast("✓ " + t("complete"));
