@@ -270,6 +270,7 @@ export default function Home() {
     setExecState("idle");
     setProgress(null);
     setDetailAgent(null);
+    setActiveTrackerIdx(-1);
 
     try {
       const conv = await get(`/api/conversations/${id}`);
@@ -278,6 +279,9 @@ export default function Home() {
         role: m.role, content: m.content, id: m.id ?? Date.now(),
       })));
       if (conv.task?.status === "running") {
+        for (let i = (conv.messages || []).length - 1; i >= 0; i--) {
+          if (conv.messages[i].role === "assistant") { setActiveTrackerIdx(i); break; }
+        }
         setTaskId(conv.task.id);
         setExecState("streaming");
         connectSSE(conv.task.id);
