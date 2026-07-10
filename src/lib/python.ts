@@ -9,9 +9,9 @@ export async function decompose(query: string, lang = "en") {
   return res.json();
 }
 
-export async function executeTask(query: string, taskId: string, lang = "en") {
+export async function executeTask(query: string, taskId: string, lang = "en", convId = "") {
   const res = await fetch(
-    `${WORKER_URL}/execute?query=${encodeURIComponent(query)}&task_id=${taskId}&lang=${lang}`,
+    `${WORKER_URL}/execute?query=${encodeURIComponent(query)}&task_id=${taskId}&lang=${lang}&conv_id=${convId}`,
     { method: "POST" }
   );
   if (!res.ok) throw new Error(`Execute failed: ${await res.text()}`);

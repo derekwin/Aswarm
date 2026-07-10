@@ -142,12 +142,11 @@ DEFAULT_MODEL_MAP = {
 }
 
 @app.post("/execute")
-async def execute_task(query: str = Query(...), task_id: str = Query(...), lang: str = Query(default="en")):
+async def execute_task(query: str = Query(...), task_id: str = Query(...), lang: str = Query(default="en"), conv_id: str = Query(default="")):
     """Start task execution in background. Events streamed via /events/{task_id}."""
     _event_queues[task_id] = asyncio.Queue()
     task = asyncio.ensure_future(_run_task(task_id, query, lang))
     task.add_done_callback(lambda t: logger.error(f"Task {task_id} crashed: {t.exception()}") if t.exception() else None)
-    # Push initial event immediately so clients know the task has started
     _push_event(task_id, {"type": "exec_state", "state": "decomposing"})
     return {"task_id": task_id, "status": "started"}
 

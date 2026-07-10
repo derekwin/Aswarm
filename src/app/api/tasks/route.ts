@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   db.update(conversations).set({ title: query.slice(0, 40) }).where(eq(conversations.id, convId)).run();
 
   // Fire-and-forget
-  executeTask(query, taskId, lang || "en").catch(console.error);
+  executeTask(query, taskId, lang || "en", convId).catch(console.error);
 
   return NextResponse.json({ taskId, convId });
 }

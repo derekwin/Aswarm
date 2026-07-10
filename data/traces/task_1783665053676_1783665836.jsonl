@@ -1,0 +1,40 @@
+{"timestamp": 1783665120.3060317, "event_type": "agent_start", "task_id": "task_1783665053676", "subtask_id": "t1", "agent_name": "集团信息收集员", "data": {}}
+{"timestamp": 1783665120.3061008, "event_type": "agent_start", "task_id": "task_1783665053676", "subtask_id": "t2", "agent_name": "新闻研究员", "data": {}}
+{"timestamp": 1783665120.3061109, "event_type": "agent_start", "task_id": "task_1783665053676", "subtask_id": "t3", "agent_name": "政策分析员", "data": {}}
+{"timestamp": 1783665126.3446472, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "政策分析员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783665135.3904583, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "集团信息收集员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783665143.4572308, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "新闻研究员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783665154.525382, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "政策分析员", "data": {"tool": "webfetch"}}
+{"timestamp": 1783665161.406455, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "集团信息收集员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783665178.631694, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "新闻研究员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783665184.7669494, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "政策分析员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783665194.6536088, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "集团信息收集员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783665209.6481833, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "新闻研究员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783665217.0669537, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "政策分析员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783665217.331336, "event_type": "agent_done", "task_id": "task_1783665053676", "subtask_id": "t3", "agent_name": "", "data": {"state": "failed", "retries": 0}}
+{"timestamp": 1783665255.157498, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "集团信息收集员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783665255.3526406, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "集团信息收集员", "data": {"tool": "judge:doom_loop"}}
+{"timestamp": 1783665362.0904195, "event_type": "agent_done", "task_id": "task_1783665053676", "subtask_id": "t2", "agent_name": "", "data": {"state": "completed", "retries": 0}}
+{"timestamp": 1783665372.6906266, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "集团信息收集员", "data": {"tool": "judge:retry"}}
+{"timestamp": 1783665372.6906888, "event_type": "agent_done", "task_id": "task_1783665053676", "subtask_id": "t1", "agent_name": "", "data": {"state": "completed", "retries": 0}}
+{"timestamp": 1783665372.6937757, "event_type": "agent_start", "task_id": "task_1783665053676", "subtask_id": "t3", "agent_name": "政策分析员", "data": {}}
+{"timestamp": 1783665384.0781124, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "政策分析员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783665402.5610144, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "政策分析员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783665424.699012, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "政策分析员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783665443.9465039, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "政策分析员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783665444.2179873, "event_type": "agent_done", "task_id": "task_1783665053676", "subtask_id": "t3", "agent_name": "", "data": {"state": "failed", "retries": 0}}
+{"timestamp": 1783665444.2214205, "event_type": "agent_start", "task_id": "task_1783665053676", "subtask_id": "t3", "agent_name": "政策分析员", "data": {}}
+{"timestamp": 1783665467.492325, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "政策分析员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783665482.7671115, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "政策分析员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783665508.8718657, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "政策分析员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783665531.155666, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "政策分析员", "data": {"tool": "search_engine"}}
+{"timestamp": 1783665531.3580043, "event_type": "agent_done", "task_id": "task_1783665053676", "subtask_id": "t3", "agent_name": "", "data": {"state": "failed", "retries": 0}}
+{"timestamp": 1783665550.3504994, "event_type": "agent_start", "task_id": "task_1783665053676", "subtask_id": "t3", "agent_name": "RailwayPolicyAgent", "data": {}}
+{"timestamp": 1783665612.9363348, "event_type": "agent_done", "task_id": "task_1783665053676", "subtask_id": "t3", "agent_name": "", "data": {"state": "completed", "retries": 0}}
+{"timestamp": 1783665612.939295, "event_type": "agent_start", "task_id": "task_1783665053676", "subtask_id": "t4", "agent_name": "数据分析师", "data": {}}
+{"timestamp": 1783665635.764306, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "数据分析师", "data": {"tool": "python_executor"}}
+{"timestamp": 1783665655.2017047, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "数据分析师", "data": {"tool": "python_executor"}}
+{"timestamp": 1783665715.1231658, "event_type": "agent_done", "task_id": "task_1783665053676", "subtask_id": "t4", "agent_name": "", "data": {"state": "completed", "retries": 0}}
+{"timestamp": 1783665715.126682, "event_type": "agent_start", "task_id": "task_1783665053676", "subtask_id": "t5", "agent_name": "报告撰写员", "data": {}}
+{"timestamp": 1783665770.1763797, "event_type": "tool_call", "task_id": "task_1783665053676", "subtask_id": "", "agent_name": "报告撰写员", "data": {"tool": "file_writer"}}
+{"timestamp": 1783665836.4025438, "event_type": "agent_done", "task_id": "task_1783665053676", "subtask_id": "t5", "agent_name": "", "data": {"state": "completed", "retries": 0}}
