@@ -43,6 +43,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 _cancel_flags: dict[str, bool] = {}
 _event_queues: dict[str, asyncio.Queue] = {}
+_event_archive: dict[str, list[dict]] = {}  # replay buffer for late-connecting clients
 
 # ── Settings ──
 
@@ -76,11 +77,15 @@ async def _load_settings():
 # ── Helpers ──
 
 def _push_event(task_id: str, event: dict):
-    """Push event to the task's SSE queue."""
+    """Push event to the task's SSE queue and archive for replay."""
     q = _event_queues.get(task_id)
     if q:
         event["task_id"] = task_id
         q.put_nowait(event)
+    # Archive for late-connecting clients
+    if task_id not in _event_archive:
+        _event_archive[task_id] = []
+    _event_archive[task_id].append(event)
 
 
 def _classify_error(e: Exception) -> str:
@@ -238,13 +243,24 @@ async def cancel_task(task_id: str):
 
 @app.get("/events/{task_id}")
 async def event_stream(task_id: str):
-    """SSE endpoint for real-time agent events."""
+    """SSE endpoint for real-time agent events with archive replay."""
     q = _event_queues.get(task_id)
     if not q:
         q = asyncio.Queue()
         _event_queues[task_id] = q
 
+    # Replay archived events for late-connecting clients
+    replay_queue: list[dict] = list(_event_archive.get(task_id, []))
+
     async def event_gen():
+        # First, replay archived events
+        for event in replay_queue:
+            data = {k: v for k, v in event.items() if k != "event_id"}
+            yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+            if event.get("type") == "done":
+                return
+
+        # Then stream live events
         while True:
             try:
                 event = await asyncio.wait_for(q.get(), timeout=15.0)
@@ -252,9 +268,8 @@ async def event_stream(task_id: str):
                 yield ":ping\n\n"
                 continue
 
-            eid = event.get("event_id", 0)
             data = {k: v for k, v in event.items() if k != "event_id"}
-            yield f"id: {eid}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
             if event.get("type") == "done":
                 break
