@@ -47,3 +47,7 @@ next-env.d.ts
 __pycache__/
 *.md
 !README.md
+/data
+*.docx
+*.pdf
+*.txt

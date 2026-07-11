@@ -10,16 +10,17 @@ import { SettingsModal } from "@/components/SettingsModal";
 import { InputBar } from "@/components/InputBar";
 import { Sidebar } from "@/components/Sidebar";
 import { useT } from "@/hooks/useT";
+import type { Agent, ChatMessage as Msg, Conversation } from "@/types";
 
-// ── API helpers ──
-
-async function get(path: string) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function get(path: string): Promise<any> {
   const res = await fetch(path);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
-async function post(path: string, body?: unknown) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function post(path: string, body?: unknown): Promise<any> {
   const res = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -29,25 +30,6 @@ async function post(path: string, body?: unknown) {
   return res.json();
 }
 
-// ── Types ──
-
-type Agent = {
-  name: string;
-  role: string;
-  state: string;
-  subtaskId: string;
-  output?: string;
-  error?: string;
-  retries?: number;
-};
-
-type Message = {
-  role: string;
-  content: string;
-  id: number;
-  typing?: boolean;
-};
-
 // ── Page ──
 
 export default function Home() {
@@ -55,7 +37,7 @@ export default function Home() {
 
   // State
   const [activeConv, setActiveConv] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Msg[]>([]);
   const [agents, setAgents] = useState<Record<string, Agent>>({});
   const [execState, setExecState] = useState("idle");
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -140,7 +122,8 @@ export default function Home() {
 
     es.onmessage = (ev) => {
       try {
-        const d = JSON.parse(ev.data);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const d: any = JSON.parse(ev.data);
         switch (d.type) {
           case "exec_state":
             setExecState(d.state);
@@ -170,7 +153,7 @@ export default function Home() {
             break;
           case "done":
             if (d.summary) {
-              setMessages(prev => [...prev, { role: "assistant", content: d.summary, id: Date.now() }]);
+              setMessages(prev => [...prev, { role: "assistant", content: d.summary ?? "", id: Date.now() }]);
               if (activeConv) post("/api/messages", { conversationId: activeConv, role: "assistant", content: d.summary }).catch(() => {});
             }
             if (taskId) fetch(`/api/tasks/${taskId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "completed" }) }).catch(() => {});
@@ -295,7 +278,7 @@ export default function Home() {
         setExecState("streaming");
         connectSSE(conv.task.id);
       }
-    } catch { /* ignore */ }
+    } catch { console.error("Error:", "unexpected error"); }
     setLoading(false);
     // Focus input after switching
     setTimeout(() => {
@@ -313,7 +296,7 @@ export default function Home() {
       await fetch(`/api/conversations/${id}`, { method: "DELETE" });
       if (id === activeConv) { setActiveConv(null); setMessages([]); setAgents({}); setExecState("idle"); }
       refreshConvs();
-    } catch { /* ignore */ }
+    } catch { console.error("Error:", "unexpected error"); }
   };
 
   // ── Derived values ──
@@ -348,7 +331,7 @@ export default function Home() {
           onDelete={handleDeleteConv}
           onNew={async () => {
             eventSource.current?.close();
-            try { const c = await post("/api/conversations", { title: "New Task" }); setActiveConv(c.id); refreshConvs(); } catch { /* ignore */ }
+            try { const c = await post("/api/conversations", { title: "New Task" }); setActiveConv(c.id); refreshConvs(); } catch { console.error("Error:", "unexpected error"); }
             setMessages([]); setAgents({}); setExecState("idle"); setProgress(null); setActiveTrackerIdx(-1);
           }}
         />
