@@ -10,6 +10,7 @@ import { SettingsModal } from "@/components/SettingsModal";
 import { InputBar } from "@/components/InputBar";
 import { Sidebar } from "@/components/Sidebar";
 import { useT } from "@/hooks/useT";
+import { useSSE } from "@/hooks/useSSE";
 import type { Agent, ChatMessage as Msg, Conversation } from "@/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -53,11 +54,7 @@ export default function Home() {
   const [activeTrackerIdx, setActiveTrackerIdx] = useState(-1);
 
   // Refs
-  const eventSource = useRef<EventSource | null>(null);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const execStateRef = useRef(execState);
-  useEffect(() => { execStateRef.current = execState; }, [execState]);
 
   // ── Data fetching ──
 
@@ -110,20 +107,15 @@ export default function Home() {
     }
   }, [execState]);
 
-  // ── SSE connection ──
+  // ── SSE ──
 
-  const connectSSE = useCallback((id: string) => {
-    eventSource.current?.close();
-    clearTimeout(reconnectTimer.current);
+  const { connect: connectSSE, disconnect: disconnectSSE, setCallback } = useSSE();
 
-    const workerUrl = `http://${window.location.hostname}:8001/events/${id}`;
-    const es = new EventSource(workerUrl);
-    eventSource.current = es;
-
-    es.onmessage = (ev) => {
+  // Register SSE event handler
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setCallback((d: any) => {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const d: any = JSON.parse(ev.data);
         switch (d.type) {
           case "exec_state":
             setExecState(d.state);
@@ -158,7 +150,6 @@ export default function Home() {
             }
             if (taskId) fetch(`/api/tasks/${taskId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "completed" }) }).catch(() => {});
             setExecState("completed");
-            es.close();
             showToast("✓ " + t("complete"));
             break;
           case "error":
@@ -170,25 +161,12 @@ export default function Home() {
             });
             if (taskId) fetch(`/api/tasks/${taskId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "failed" }) }).catch(() => {});
             setExecState("failed");
-            es.close();
             showToast("✗ " + t("failed"));
             break;
         }
       } catch { /* malformed event */ }
-    };
-
-    es.onerror = () => {
-      es.close();
-      const state = execStateRef.current;
-      if (state === "streaming" || state === "decomposing" || state === "connecting") {
-        reconnectTimer.current = setTimeout(() => connectSSE(id), 2000);
-      }
-    };
-  }, [t]);
-
-  useEffect(() => {
-    return () => { eventSource.current?.close(); clearTimeout(reconnectTimer.current); };
-  }, []);
+    });
+  }, [setCallback]);
 
   // Auto-scroll on new messages (only if near bottom)
   useEffect(() => {
@@ -246,14 +224,13 @@ export default function Home() {
   };
 
   const handleStop = () => {
-    eventSource.current?.close();
+    disconnectSSE();
     setExecState("cancelled");
     if (taskId) post(`/api/tasks/${taskId}/cancel`).catch(() => {});
   };
 
   const switchConversation = async (id: string) => {
-    eventSource.current?.close();
-    clearTimeout(reconnectTimer.current);
+    disconnectSSE();
     setActiveConv(id);
     setLoading(true);
     localStorage.setItem("lastConvId", id);
@@ -330,7 +307,7 @@ export default function Home() {
           onSelect={(id) => { switchConversation(id); setSidebarOpen(false); }}
           onDelete={handleDeleteConv}
           onNew={async () => {
-            eventSource.current?.close();
+            disconnectSSE();
             try { const c = await post("/api/conversations", { title: "New Task" }); setActiveConv(c.id); refreshConvs(); } catch { console.error("Error:", "unexpected error"); }
             setMessages([]); setAgents({}); setExecState("idle"); setProgress(null); setActiveTrackerIdx(-1);
           }}
