@@ -248,9 +248,13 @@ export default function Home() {
         role: m.role, content: m.content, id: m.id ?? Date.now(),
       })));
       if (conv.task?.status === "running") {
-        for (let i = (conv.messages || []).length - 1; i >= 0; i--) {
-          if (conv.messages[i].role === "assistant") { setActiveTrackerIdx(i); break; }
+        const msgs = conv.messages || [];
+        // If no assistant message for this running task, add a placeholder
+        const lastIsAssistant = msgs.length > 0 && msgs[msgs.length - 1].role === "assistant";
+        if (!lastIsAssistant) {
+          setMessages(prev => [...prev, { role: "assistant", content: "", typing: false, id: Date.now() }]);
         }
+        setActiveTrackerIdx(lastIsAssistant ? msgs.length - 1 : msgs.length);
         setTaskId(conv.task.id);
         setExecState("streaming");
         connectSSE(conv.task.id);
