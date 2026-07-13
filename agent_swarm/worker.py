@@ -181,6 +181,10 @@ async def _do_run_task(task_id: str, query: str, lang: str, conv_id: str = ""):
     _push_event(task_id, {"type": "exec_state", "state": "decomposing"})
     dag = await scheduler.decompose(query, lang=lang)
 
+    for s in dag.subtasks:
+        if s.agent_config.role in ("coder", "data_analyst") and "python_executor" not in s.agent_config.tools:
+            s.agent_config.tools = list(s.agent_config.tools) + ["python_executor"]
+
     subtask_info = [
         {"id": s.id, "name": s.agent_config.name, "role": s.agent_config.role,
          "tools": s.agent_config.tools, "depends_on": s.depends_on}
